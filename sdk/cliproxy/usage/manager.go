@@ -20,8 +20,20 @@ const DefaultServiceTier = "default"
 // historical direct-SDK default.
 const AutoServiceTier = "auto"
 
-// Record contains the usage statistics captured for a single provider request.
+// Attribution snapshots the caller and serving channel without storing secrets.
+type Attribution struct {
+	SiteID         string
+	Consumer       string
+	KeyID          string
+	KeyName        string
+	Owner          string
+	ChannelID      string
+	Channel        string
+	CredentialName string
+}
+
 type Record struct {
+	Attribution Attribution
 	// RequestID uniquely identifies this specific model execution instance (UUID v4).
 	RequestID string
 	// TraceID identifies the parent inbound HTTP request when available (8-character hex).
@@ -404,6 +416,9 @@ func (m *Manager) Publish(ctx context.Context, record Record) {
 		} else if trID := internallogging.GetRequestID(ctx); trID != "" {
 			record.TraceID = trID
 		}
+	}
+	if record.Attribution.Consumer == "" {
+		record.Attribution = AttributionFromContext(ctx)
 	}
 	// ensure worker is running even if Start was not called explicitly
 	m.Start(context.Background())

@@ -121,6 +121,11 @@ func (s *Service) commitConfigUpdate(newCfg *config.Config) configCommit {
 		return configCommit{}
 	}
 	s.cfgMu.Lock()
+	if s.server != nil && s.cfg != nil && s.cfg.MultiUser != newCfg.MultiUser {
+		s.cfgMu.Unlock()
+		log.Error("multi-user configuration changes require a server restart")
+		return configCommit{}
+	}
 	s.cfg = newCfg
 	s.cfgMu.Unlock()
 	s.cancelStaleAntigravityProbes("")

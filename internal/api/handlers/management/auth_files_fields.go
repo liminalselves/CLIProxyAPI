@@ -18,6 +18,7 @@ import (
 	claudeauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/codex"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/credentialweight"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/watcher/synthesizer"
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v8/sdk/auth"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -946,6 +947,9 @@ func (h *Handler) saveTokenRecord(ctx context.Context, record *coreauth.Auth) (s
 	if record == nil {
 		return "", fmt.Errorf("token record is nil")
 	}
+	if errContext := h.applyHubCredentialContext(ctx, record); errContext != nil {
+		return "", errContext
+	}
 	h.mergeExistingAuthFileMetadata(record)
 	store := h.tokenStoreWithBaseDir()
 	if store == nil {
@@ -966,6 +970,11 @@ func (h *Handler) saveTokenRecord(ctx context.Context, record *coreauth.Auth) (s
 	savedPath, errSave := store.Save(coreauth.WithAuthCreationIntent(ctx), record)
 	if errSave != nil {
 		return savedPath, errSave
+	}
+	if value, ok := multiuser.CredentialContextFrom(ctx); ok && h.hubStore != nil {
+		if errAudit := h.hubStore.Audit(multiuser.AuditEvent{Actor: value.Actor.Username, Action: "credential.saved", Target: record.ID, Status: http.StatusCreated}); errAudit != nil {
+			log.WithError(errAudit).Error("multi-user: failed to persist credential audit")
+		}
 	}
 	if legacyClaudeCredential != nil {
 		if strings.TrimSpace(savedPath) == "" {

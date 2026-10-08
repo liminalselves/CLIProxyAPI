@@ -15,6 +15,7 @@ go test -v -run TestName ./path/to/pkg # Run single test
 go build -o test-output ./cmd/server && rm test-output # Verify compile (REQUIRED after changes)
 ```
 - Common flags: `--config <path>`, `--tui`, `--standalone`, `--local-model`, `--no-browser`, `--oauth-callback-port <port>`
+- Windows local development and launcher lifecycle: see `docs/development_CN.md`.
 
 ## Config
 - Default config: `config.yaml` (template: `config.example.yaml`)
@@ -35,7 +36,9 @@ go build -o test-output ./cmd/server && rm test-output # Verify compile (REQUIRE
 - `internal/cache/` — Request signature caching
 - `internal/watcher/` — Config hot-reload and watchers
 - `internal/wsrelay/` — WebSocket relay sessions
-- `internal/usage/` — Usage and token accounting
+- `sdk/cliproxy/usage/` — Usage dispatch and canonical token accounting
+- `internal/multiuser/` — Invite-only account backend; routing, storage and frontend build boundaries: `docs/multi-user.md`
+- `frontend/` — Vendored official Management Center. Extend its existing layouts, components and themes; run `bun run --cwd frontend verify` before Go builds after UI changes.
 - `internal/home/` — CLIProxyAPIHome control plane integration (bootstrap, RESP communication, dispatch coordination)
 - `internal/tui/` — Bubbletea terminal UI (`--tui`, `--standalone`)
 - `sdk/cliproxy/` — Embeddable SDK entry (service/builder/watchers/pipeline)

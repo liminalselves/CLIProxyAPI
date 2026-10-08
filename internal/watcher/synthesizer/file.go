@@ -159,6 +159,9 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 	if email, _ := metadata["email"].(string); email != "" {
 		label = email
 	}
+	if explicitLabel, _ := metadata["label"].(string); strings.TrimSpace(explicitLabel) != "" {
+		label = strings.TrimSpace(explicitLabel)
+	}
 	// Use relative path under authDir as ID to stay consistent with the file-based token store.
 	id := fullPath
 	if strings.TrimSpace(ctx.AuthDir) != "" {
@@ -257,6 +260,20 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 			} else {
 				a.Attributes["plan_type"] = codex.DefaultPlanType
 			}
+		}
+	}
+	// For hub-mounted AI providers (OpenAI-compatible upstreams stored as auth
+	// files), expose the upstream endpoint, key and unique compat name as
+	// executor attributes; the advertised model list stays in metadata.
+	if provider == "openai-compatible" {
+		if bu, ok := metadata["base_url"].(string); ok && strings.TrimSpace(bu) != "" {
+			a.Attributes["base_url"] = strings.TrimSpace(bu)
+		}
+		if key, ok := metadata["api_key"].(string); ok && strings.TrimSpace(key) != "" {
+			a.Attributes["api_key"] = strings.TrimSpace(key)
+		}
+		if name, ok := metadata["compat_name"].(string); ok && strings.TrimSpace(name) != "" {
+			a.Attributes["compat_name"] = strings.TrimSpace(name)
 		}
 	}
 	return []*coreauth.Auth{a}, nil

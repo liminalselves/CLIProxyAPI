@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	internalconfig "github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
@@ -997,6 +998,11 @@ func (m *Manager) pickViaPluginScheduler(ctx context.Context, scheduler PluginSc
 }
 
 func (m *Manager) authSupportsRouteModel(registryRef *registry.ModelRegistry, auth *Auth, routeModel string) bool {
+	if cfg, ok := m.runtimeConfig.Load().(*internalconfig.Config); ok && cfg != nil && cfg.MultiUser.Enabled {
+		if auth == nil || !auth.ChannelPublished() || !strings.HasPrefix(canonicalModelKey(routeModel), auth.Prefix+"/") || !auth.ChannelModelEnabled(canonicalModelKey(routeModel)) {
+			return false
+		}
+	}
 	if registryRef == nil || auth == nil {
 		return true
 	}
@@ -1213,7 +1219,7 @@ func (m *Manager) closestCooldownWaitWithAttempted(providers []string, model str
 		if _, ok := providerSet[providerKey]; !ok {
 			continue
 		}
-		if model != "" && !m.authSupportsRouteModel(registryRef, auth, model) {
+		if !m.authSupportsRouteModel(registryRef, auth, model) {
 			continue
 		}
 		effectiveRetry := effectiveRequestRetryLimit(auth, defaultRequestRetry)
@@ -1305,7 +1311,7 @@ func (m *Manager) retryAllowed(attempt int, providers []string, model string, el
 		if _, ok := providerSet[providerKey]; !ok {
 			continue
 		}
-		if model != "" && !m.authSupportsRouteModel(registryRef, auth, model) {
+		if !m.authSupportsRouteModel(registryRef, auth, model) {
 			continue
 		}
 		effectiveRetry := effectiveRequestRetryLimit(auth, defaultRequestRetry)
@@ -1641,6 +1647,9 @@ func (m *Manager) useSchedulerFastPath() bool {
 	if m == nil || m.scheduler == nil {
 		return false
 	}
+	if cfg, ok := m.runtimeConfig.Load().(*internalconfig.Config); ok && cfg != nil && cfg.MultiUser.Enabled {
+		return false
+	}
 	return isBuiltInSelector(m.Selector())
 }
 
@@ -1767,7 +1776,7 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		if _, used := tried[candidate.ID]; used {
 			continue
 		}
-		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
+		if !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
 		candidates = append(candidates, candidate)
@@ -2101,7 +2110,7 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		if _, ok := m.executorLocked(providerKey); !ok {
 			continue
 		}
-		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
+		if !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
 		candidates = append(candidates, candidate)
@@ -2325,7 +2334,7 @@ func (m *Manager) warnLogAuthUnavailable(ctx context.Context, providers []string
 				continue
 			}
 		}
-		if model != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
+		if !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
 		totalCandidates++

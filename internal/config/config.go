@@ -38,6 +38,11 @@ type Config struct {
 	// Plugins configures dynamic plugin discovery and per-plugin settings.
 	Plugins PluginsConfig `yaml:"plugins" json:"plugins"`
 
+	MultiUser MultiUserConfig `yaml:"multi-user" json:"multi-user"`
+
+	// Branding holds custom site identity overrides for the management panel.
+	Branding BrandingConfig `yaml:"branding" json:"branding"`
+
 	// AuthDir is the directory where authentication token files are stored.
 	AuthDir string `yaml:"auth-dir" json:"-"`
 

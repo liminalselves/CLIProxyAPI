@@ -451,7 +451,7 @@ func (s *Service) antigravityModelsForHintsWithConfig(auth *coreauth.Auth, hints
 	models = applyOAuthModelAliasForAuth(cfg, "antigravity", auth.AuthKind(), auth.Attributes, models)
 	models = s.appendPluginModels("antigravity", models)
 	models = applyOAuthSettingsForAuth(cfg, "antigravity", auth.AuthKind(), models)
-	return applyModelPrefixes(models, auth.Prefix, cfg.ForceModelPrefix)
+	return filterChannelModels(auth, applyModelPrefixes(models, auth.Prefix, cfg.ForceModelPrefix), cfg.MultiUser.Enabled)
 }
 
 func (s *Service) asyncProbeAntigravityCapabilities(ctx context.Context, auth *coreauth.Auth, providerKey string) {

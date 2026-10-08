@@ -87,6 +87,12 @@ func TestAutoUpdateSkipReason(t *testing.T) {
 			wantSkip:   true,
 		},
 		{
+			name:       "multi-user bundled frontend",
+			cfg:        &config.Config{MultiUser: config.MultiUserConfig{Enabled: true}},
+			wantReason: "multi-user mode uses the bundled management frontend",
+			wantSkip:   true,
+		},
+		{
 			name: "control panel disabled",
 			cfg: &config.Config{
 				RemoteManagement: config.RemoteManagement{DisableControlPanel: true},

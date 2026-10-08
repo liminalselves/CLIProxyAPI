@@ -8,6 +8,7 @@ config.yaml
 
 # Generated content
 bin/*
+/local-data/
 /logs
 conv/*
 temp/*
@@ -31,10 +32,13 @@ auths/*
 # Documentation
 docs/*
 !docs/management-api-v8.md
+!docs/multi-user.md
+!docs/development_CN.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md
 AGENTS.override.md
+!frontend/AGENTS.md
 
 # Tooling metadata
 .vscode/*
@@ -56,6 +60,7 @@ _bmad/*
 _bmad-output/*
 .gocache/
 .gitnexus/
+.zcode/
 
 # macOS
 .DS_Store

@@ -45,6 +45,14 @@ CLIProxyAPI 是一个为 CLI 提供 OpenAI/Gemini/Claude/Codex/Grok 兼容 API �
 </tbody>
 </table>
 
+## Windows 本地开发
+
+在项目目录运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1`，或双击 `start-dev.cmd`，即可构建并启动当前源码。需要 Go 1.26+ 和本地 `config.yaml`；配置、后台运行和停止方法见 [本地开发指南](docs/development_CN.md)。
+
+## 邀请制模型共享站
+
+启用 `multi-user.enabled: true` 后访问原管理入口 `/management.html`，每人使用独立账户，可创建多个 API Key、上传自己的订阅凭证、挂载 OpenAI 兼容的 AI 提供商、按渠道选择模型。模型 ID 统一为 `渠道-来源/模型名`：凭证如 `573-kimi#1/kimi-k3`，AI 提供商如 `573-daye/kimi-k3`。渠道可设为公开（全员可上传、挂载、编辑公告），每个渠道有详情页、公告和留言板。调用用量和操作日志全员可查，普通成员管理自己的凭证，管理员可管理全站。配置与使用说明见 [多用户共享站指南](docs/multi-user.md)。
+
 ## 赞助商
 
 [![https://www.packyapi.com/register?aff=cliproxyapi](./assets/packycode-cn.png)](https://www.packyapi.com/register?aff=cliproxyapi)

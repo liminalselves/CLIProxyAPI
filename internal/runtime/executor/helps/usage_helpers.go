@@ -26,6 +26,7 @@ import (
 )
 
 type UsageReporter struct {
+	attribution         usage.Attribution
 	requestID           string
 	traceID             string
 	provider            string
@@ -113,7 +114,15 @@ func NewUsageReporter(ctx context.Context, provider, model string, auth *cliprox
 	if traceID == "" {
 		traceID = internallogging.GetRequestID(ctx)
 	}
+	attribution := usage.AttributionFromContext(ctx)
+	if auth != nil {
+		attribution.Owner = auth.Owner()
+		attribution.ChannelID = auth.ChannelID()
+		attribution.Channel = auth.Prefix
+		attribution.CredentialName = auth.FileName
+	}
 	reporter := &UsageReporter{
+		attribution:     attribution,
 		requestID:       uuid.NewString(),
 		traceID:         traceID,
 		provider:        provider,
@@ -634,6 +643,7 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		responseModel = r.ResponseModel()
 	}
 	return usage.Record{
+		Attribution:         r.attribution,
 		RequestID:           r.requestID,
 		TraceID:             r.traceID,
 		Provider:            r.provider,

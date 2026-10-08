@@ -573,7 +573,7 @@ func IsV8ConfigLayout(root *yaml.Node) bool {
 }
 
 func v8AllowedRoots() map[string]bool {
-	allowed := map[string]bool{"models": true, "config-version": true, "api-keys": true, "plugins": true, "quota-exceeded": true, "client": true}
+	allowed := map[string]bool{"models": true, "config-version": true, "api-keys": true, "plugins": true, "quota-exceeded": true, "client": true, "multi-user": true, "branding": true}
 	for _, path := range v8Paths {
 		section, _, _ := strings.Cut(path.current, ".")
 		allowed[section] = true
@@ -912,6 +912,9 @@ func ValidateV8Config(data []byte) error {
 	var cfg legacyConfig
 	if errDecode := decoder.Decode(&cfg); errDecode != nil {
 		return errDecode
+	}
+	if err := cfg.MultiUser.Validate(); err != nil {
+		return err
 	}
 	return cfg.Models.Validate()
 }

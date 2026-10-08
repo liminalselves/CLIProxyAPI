@@ -2,6 +2,7 @@ package cliproxy
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -285,6 +286,13 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 					return
 				}
 			}
+			// Channel-mounted AI providers (multi-user hub) carry their advertised
+			// model list in the auth file metadata instead of the server config.
+			if isCompatAuth {
+				if compat := openAICompatFromAuthMetadata(a); compat != nil && registerCompat(compat) {
+					return
+				}
+			}
 			if isCompatAuth {
 				models = s.appendPluginModels(providerKey, nil)
 				if len(models) > 0 {
@@ -401,6 +409,32 @@ func configEntryForAuthIndex[T any](auth *coreauth.Auth, entries []T) *T {
 		return nil
 	}
 	return &entries[index]
+}
+
+// openAICompatFromAuthMetadata builds a synthetic OpenAI-compat entry from the
+// auth file's metadata model list. Multi-user hub AI providers are auth files
+// (type "openai-compatible") that advertise models without a server config entry.
+func openAICompatFromAuthMetadata(auth *coreauth.Auth) *config.OpenAICompatibility {
+	if auth == nil || auth.Metadata == nil {
+		return nil
+	}
+	raw, ok := auth.Metadata["models"]
+	if !ok {
+		return nil
+	}
+	data, errMarshal := json.Marshal(raw)
+	if errMarshal != nil {
+		return nil
+	}
+	var models []config.OpenAICompatibilityModel
+	if errUnmarshal := json.Unmarshal(data, &models); errUnmarshal != nil || len(models) == 0 {
+		return nil
+	}
+	name := ""
+	if auth.Attributes != nil {
+		name = strings.TrimSpace(auth.Attributes["compat_name"])
+	}
+	return &config.OpenAICompatibility{Name: name, Models: models}
 }
 
 func (s *Service) resolveConfigClaudeKey(auth *coreauth.Auth) *config.ClaudeKey {

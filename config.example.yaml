@@ -20,6 +20,22 @@ models:
   codex-catalog: ""
   devin-catalog: ""
 
+# Invite-only subscription sharing console. See docs/multi-user.md.
+# Restart after changing these settings. Disabled preserves single-user behavior.
+multi-user:
+  enabled: false
+  # Defaults to <oauth.auth-dir>-hub; must be outside the credential directory.
+  data-dir: ""
+  # 0 uses the default of 168 hours.
+  session-ttl-hours: 168
+
+# Custom site identity shown in the management panel. Empty values keep the
+# default product branding. site-logo accepts a data:image/ URL or an http(s) URL.
+branding:
+  site-name: ""
+  site-subtitle: ""
+  site-logo: ""
+
 # Listener, TLS, network discovery, and server operation.
 server:
   # Server host/interface to bind to. Default is empty ("") to bind all interfaces (IPv4 + IPv6).

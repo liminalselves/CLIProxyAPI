@@ -24,6 +24,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/redisqueue"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
@@ -82,13 +83,16 @@ type Server struct {
 	wsAuthEnabled atomic.Bool
 
 	// management handler
-	mgmt *managementHandlers.Handler
+	mgmt       *managementHandlers.Handler
+	hub        *multiuser.Controller
+	hubInitErr error
 
 	// pluginHost owns dynamic plugin Management API route dispatch.
 	pluginHost *pluginhost.Host
 
 	// managementRoutesRegistered tracks whether the management routes have been attached to the engine.
-	managementRoutesRegistered atomic.Bool
+	managementRoutesRegistered   atomic.Bool
+	managementV8RoutesRegistered atomic.Bool
 	// managementRoutesEnabled controls whether management endpoints serve real handlers.
 	managementRoutesEnabled atomic.Bool
 
@@ -198,10 +202,14 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		optionState.pluginHost.SetModelExecutor(s.handlers)
 		optionState.pluginHost.SetAuthManager(authManager)
 	}
+	s.initializeHub(cfg)
 	// Save initial YAML snapshot
 	s.oldConfigYaml, _ = yaml.Marshal(cfg)
 	s.applyAccessConfig(nil, cfg)
 	if authManager != nil {
+		if cfg.MultiUser.Enabled {
+			authManager.SetConfig(cfg)
+		}
 		authManager.SetRetryConfig(cfg.RequestRetry, time.Duration(cfg.MaxRetryInterval)*time.Second, cfg.MaxRetryCredentials)
 	}
 	managementasset.SetCurrentConfig(cfg)
@@ -224,14 +232,19 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		s.mgmt.SetPostAuthPersistHook(optionState.postAuthPersistHook)
 	}
 	s.localPassword = optionState.localPassword
+	if s.hub != nil {
+		s.mgmt.SetHubStore(s.hub.Store)
+	}
 
 	// Home heartbeat gate: when home is enabled, block all endpoints with 503 until the
 	// subscribe-config heartbeat connection is healthy.
 	engine.Use(s.homeHeartbeatMiddleware())
 	engine.Use(s.exampleAPIKeySafeModeMiddleware())
 
+	engine.Use(s.hubRequestMiddleware())
 	// Setup routes
 	s.setupRoutes()
+	s.registerHubRoutes()
 
 	// Apply additional router configurators from options
 	if optionState.routerConfigurator != nil {
@@ -287,6 +300,9 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) Start() error {
 	if s == nil || s.server == nil {
 		return fmt.Errorf("failed to start HTTP server: server not initialized")
+	}
+	if s.hubInitErr != nil {
+		return s.hubInitErr
 	}
 
 	addr := s.server.Addr

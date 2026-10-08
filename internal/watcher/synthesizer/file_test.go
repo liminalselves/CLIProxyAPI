@@ -1108,3 +1108,58 @@ func TestSynthesizeAuthFile_CodexPlanType(t *testing.T) {
 		})
 	}
 }
+
+func TestFileSynthesizer_Synthesize_OpenAICompatibleHubProvider(t *testing.T) {
+	tempDir := t.TempDir()
+	authData := map[string]any{
+		"type":          "openai-compatible",
+		"label":         "daye",
+		"base_url":      "https://api.example.com/v1",
+		"api_key":       "sk-secret",
+		"compat_name":   "hub-ch-1-daye",
+		"prefix":        "573-daye",
+		"owner":         "alice",
+		"channel_id":    "ch-1",
+		"provider_name": "daye",
+		"models":        []map[string]any{{"name": "kimi-k3", "alias": "kimi-k3"}},
+	}
+	data, errMarshal := json.Marshal(authData)
+	if errMarshal != nil {
+		t.Fatalf("marshal provider auth: %v", errMarshal)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "573-daye.json"), data, 0644); err != nil {
+		t.Fatalf("failed to write provider auth file: %v", err)
+	}
+
+	auths, err := NewFileSynthesizer().Synthesize(&SynthesisContext{
+		Config:      &config.Config{},
+		AuthDir:     tempDir,
+		Now:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		IDGenerator: NewStableIDGenerator(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	a := auths[0]
+	if a.Provider != "openai-compatible" {
+		t.Fatalf("provider = %q", a.Provider)
+	}
+	if got := a.Attributes["base_url"]; got != "https://api.example.com/v1" {
+		t.Fatalf("base_url attribute = %q", got)
+	}
+	if got := a.Attributes["api_key"]; got != "sk-secret" {
+		t.Fatalf("api_key attribute = %q", got)
+	}
+	if got := a.Attributes["compat_name"]; got != "hub-ch-1-daye" {
+		t.Fatalf("compat_name attribute = %q", got)
+	}
+	if a.Prefix != "573-daye" {
+		t.Fatalf("prefix = %q", a.Prefix)
+	}
+	if _, ok := a.Metadata["models"].([]any); !ok {
+		t.Fatalf("models metadata not preserved: %#v", a.Metadata["models"])
+	}
+}

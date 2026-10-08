@@ -1,0 +1,7 @@
+@use '../../styles/mixins' as *;
+
+// The picker renders as a standalone card above page content containers that
+// carry their own vertical rhythm, so it brings its own bottom spacing.
+.picker {
+  margin-bottom: $spacing-xl;
+}

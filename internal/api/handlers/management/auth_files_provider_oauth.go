@@ -21,6 +21,7 @@ import (
 	metaauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/meta"
 	xaiauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/xai"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/misc"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -1078,6 +1079,9 @@ func PopulateAuthContext(ctx context.Context, c *gin.Context) context.Context {
 	info := &coreauth.RequestInfo{
 		Query:   c.Request.URL.Query(),
 		Headers: c.Request.Header,
+	}
+	if value, ok := multiuser.CredentialContextFrom(c.Request.Context()); ok {
+		ctx = multiuser.WithCredentialContext(ctx, value)
 	}
 	return coreauth.WithRequestInfo(ctx, info)
 }

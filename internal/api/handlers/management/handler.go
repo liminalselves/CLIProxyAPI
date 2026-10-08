@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/buildinfo"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginstore"
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v8/sdk/auth"
@@ -61,6 +62,7 @@ type Handler struct {
 	pluginStoreHTTPClient   pluginstore.HTTPDoer
 	pluginStoreRateLimiter  *pluginstore.GitHubRateLimiter
 	pluginReleases          pluginReleaseCache
+	hubStore                *multiuser.Store
 }
 
 type configReloadSnapshot struct {
@@ -287,6 +289,16 @@ func (h *Handler) Middleware() gin.HandlerFunc {
 			provided = c.GetHeader("X-Management-Key")
 		}
 
+		if h.hubStore != nil && strings.HasPrefix(c.Request.URL.Path, "/v8/management") {
+			if user, ok := h.hubStore.AuthenticateSession(provided); ok {
+				if user.Role != "admin" {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "administrator access required"})
+					return
+				}
+				c.Next()
+				return
+			}
+		}
 		allowed, statusCode, errMsg := h.AuthenticateManagementKey(clientIP, localClient, provided)
 		if !allowed {
 			c.AbortWithStatusJSON(statusCode, gin.H{"error": errMsg})

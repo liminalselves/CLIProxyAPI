@@ -8,6 +8,9 @@ available in the [management API guide](https://help.router-for.me/management/ap
 ## Access
 
 The v8 endpoints use the same management key and remote-access policy as v0.
+When [multi-user mode](multi-user.md) is enabled, an administrator's account session
+also authenticates v8 management requests. Members use `/v8/hub`, not management
+endpoints. Shared management-key operations are audited as `management-key`.
 Send `Authorization: Bearer <management-key>` or `X-Management-Key: <management-key>`.
 OAuth callbacks validate a pending login state and do not require a management-key
 header. Home mode disables local management endpoints for both versions.
@@ -114,6 +117,26 @@ retain the corresponding business operation's fields.
 | `/plugins/store` | GET | List the plugin store. |
 | `/plugins/store/<id>/install` | POST | Install or update a plugin. |
 | `/plugins/<id>/quota` | GET, POST, DELETE | Read, fetch, or reset plugin quota. |
+| `/branding` | PUT | Replace site branding shown in the management panel. |
+
+## Branding
+
+`PUT /v8/management/branding` replaces the `branding` configuration section in
+one validated write. The body carries all three fields; empty values restore
+the default product branding.
+
+```json
+{
+  "site-name": "My Site",
+  "site-subtitle": "Gateway for my team",
+  "site-logo": "data:image/png;base64,..."
+}
+```
+
+`site-name` is limited to 100 characters, `site-subtitle` to 200, and
+`site-logo` must be a `data:image/` or `http(s)` URL under 4MB. The public,
+unauthenticated `GET /v8/branding` endpoint returns the same fields so the
+login page can render custom branding before signing in.
 
 ## OAuth
 

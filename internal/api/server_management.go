@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -219,7 +220,7 @@ func (s *Server) managementAvailable(c *gin.Context) bool {
 		c.AbortWithStatus(http.StatusNotFound)
 		return false
 	}
-	if !s.managementRoutesEnabled.Load() {
+	if !s.managementRoutesEnabled.Load() && !(s.hub != nil && strings.HasPrefix(c.Request.URL.Path, "/v8/management")) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return false
 	}
@@ -309,6 +310,10 @@ func (s *Server) pluginResourceNoRoute(c *gin.Context) {
 
 func (s *Server) serveManagementControlPanel(c *gin.Context) {
 	cfg := s.cfg
+	if cfg != nil && cfg.MultiUser.Enabled && !cfg.Home.Enabled {
+		multiuser.Panel(c)
+		return
+	}
 	if cfg == nil || cfg.Home.Enabled || cfg.RemoteManagement.DisableControlPanel {
 		c.AbortWithStatus(http.StatusNotFound)
 		return

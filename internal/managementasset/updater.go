@@ -111,6 +111,9 @@ func autoUpdateSkipReason(cfg *config.Config) (string, bool) {
 	if cfg.Home.Enabled {
 		return "cluster mode enabled", true
 	}
+	if cfg.MultiUser.Enabled {
+		return "multi-user mode uses the bundled management frontend", true
+	}
 	if cfg.RemoteManagement.DisableControlPanel {
 		return "control panel disabled", true
 	}

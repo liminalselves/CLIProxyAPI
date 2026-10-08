@@ -1,0 +1,251 @@
+# Invite-only subscription sharing
+
+The original CLI Proxy API Management Center at `/management.html` now includes
+accounts, multiple personal API keys, owned channels, a model marketplace,
+persistent usage records and an operation journal. Its existing login shell,
+sidebar, themes, credential cards, details drawer, OAuth pages and shared UI
+components are reused. `/hub.html` redirects to the same frontend.
+Members manage their own credentials; administrators manage all credentials and
+issue invitations. Every signed-in member can inspect everyone's usage and audit
+records, but cannot retrieve other members' keys or upstream tokens.
+
+## Enable
+
+Add this top-level section to your existing configuration and restart the server:
+
+```yaml
+multi-user:
+  enabled: true
+  data-dir: "./hub-data"
+  session-ttl-hours: 168
+```
+
+The feature is disabled by default. `data-dir` is relative to the configuration
+file directory; when omitted it defaults to `<oauth.auth-dir>-hub`. It must be
+outside `oauth.auth-dir`: credential loaders recursively inspect JSON files.
+Account settings require a restart, not hot reload. Account and journal files
+remain local even when the credential store uses Postgres, Git, or object storage.
+Use one server process per account data directory. This is not a Home worker feature.
+
+1. Visit `/management.html`. The first registered account becomes administrator without
+   an invitation. Complete this setup before sharing the site with friends.
+2. Administrators generate invitation codes with an expiry and a use count.
+3. A member registers, logs in, and creates one or more personal keys. Keys are
+   named independently (for example, phone and laptop). The full secret is shown
+   only when created; the store retains its hash and a display hint.
+4. Create a channel, such as `573`, then upload a CLIProxyAPI
+   credential JSON into it, or use the channel's OAuth login action. Existing
+   OAuth providers and refresh behavior are reused. JSON must include the provider
+   `type`, as in existing CLIProxyAPI auth files; this is not a generic token-paste
+   or provider-key configuration editor. Members can also mount AI providers: an
+   OpenAI-compatible upstream defined by a base URL, an API key, an optional proxy
+   URL, and a model list (fetched from the upstream `/models` or edited manually).
+   Member-supplied upstream URLs are contacted by the server process; run this
+   feature only on a trusted, invite-only site.
+5. Find a model in the marketplace. The marketplace groups identical base model
+   IDs into one card and lists every callable model ID inside it, with channel
+   ownership, availability, context length and capability details per entry.
+   Copy the complete pinned model ID and configure your client:
+
+   ```text
+   Base URL: https://your-site/v1
+   API key:  sk-hub-...
+   Model:    573-kimi#1/<model-listed-in-the-marketplace>
+   ```
+
+A username is the account's only name, used for login and display. It contains
+3–32 lowercase letters, digits or underscores, starts with a letter, and cannot
+change after registration. A channel identifier (`slug`) is the channel's only
+name. It contains 1–40 lowercase letters, digits or hyphens, cannot start with a
+hyphen, is unique across the whole site, and cannot change after creation because
+model IDs depend on it. There are no separate account display names or channel
+names. Existing usernames, identifiers and pinned model IDs remain unchanged.
+
+## Model naming
+
+Model IDs contain no username; they are `channel-source/model`:
+
+- Credentials: `{channel-slug}-{credential-type}#{index}/{model}`, for example
+  `573-kimi#1/kimi-k3` for the first Kimi credential in channel `573` and
+  `573-kimi#2/kimi-k3` for the second. The index is allocated per channel and
+  credential type, increases monotonically, and is never reused.
+- AI providers: `{channel-slug}-{provider-name}/{model}`, for example
+  `573-daye/kimi-k3`. The provider name is chosen at creation (slug format, no
+  `#`) and is immutable afterwards.
+
+This is a breaking rename: model IDs from before this scheme (including any
+`username-slug` prefixed IDs) stop resolving after upgrade, so update client
+configurations. On startup the server migrates stored channels and credentials
+to pinned prefixes once, logging any channel slug collisions it resolves by
+keeping the original composite prefix for the later channel.
+
+## Frontend source and build
+
+`frontend/` vendors the official [Management Center](https://github.com/router-for-me/Cli-Proxy-API-Management-Center)
+source at revision `ee79a794526a30c03748a8864a9ac6589a31833b`, with its MIT license,
+existing dependencies and Bun lockfile. There is no separate custom-designed hub UI.
+
+```bash
+bun install --cwd frontend --frozen-lockfile
+bun run --cwd frontend verify
+go build -o cli-proxy-api ./cmd/server
+```
+
+The frontend build produces its original single-file `dist/index.html` and copies
+it to `internal/multiuser/panel/management.html` for Go embedding. Rebuild the
+frontend before building Go after UI changes. Never edit the generated bundle.
+Multi-user mode serves this bundled frontend rather than downloading an upstream
+asset that does not have account integration. Single-user mode preserves the
+original downloaded management panel. No existing local asset is overwritten.
+
+Administrators retain the original provider, quota, config and diagnostic pages.
+Members see account-sharing pages and the original owner-scoped credential/OAuth
+workflows. The credential details drawer still edits proxy, headers, scheduling
+weight and supported policy fields; ownership and channel prefixes cannot be
+changed there. Download and refresh operations remain owner/admin-only. Batch
+operations apply only to selectable, manageable credentials.
+
+## Channels and routing
+
+A member can create several channels, each with several credential files and AI
+providers. A channel is owned by one member. Its published model IDs always have
+the pinned source prefix described above. Only credentials in that channel can
+serve those models; round-robin and existing cooldown behavior still operate
+within the eligible credential pool.
+
+A channel can be marked **public**: any signed-in member may then upload
+credentials, mount providers, edit the announcement and moderate the message
+board on it. The `public` flag itself remains owner/admin-only, so a public
+channel cannot be locked back to private by a member. Channel ownership is never
+transferred by content edits: the credential `owner` stays the channel owner for
+permission checks, while `created_by` records the member who actually mounted
+each credential or provider.
+
+Each channel has a detail page with its mounted credentials and providers (with
+the mounting member), a plain-text announcement editable by channel managers,
+and a plain-text message board where every member can post to coordinate usage
+and allocation. Announcements are capped at 5000 characters, board messages at
+2000 characters, and each channel retains at most 200 messages with the oldest
+pruned on insert. Messages can be deleted by their author or a channel manager;
+they cannot be edited.
+
+Bare model IDs and automatic cross-channel selection are not supported. The
+console enforces this independently of `routing.force-model-prefix`. In multi-user
+mode the legacy `access.api-keys` list does not authenticate proxy callers: use
+personal keys created in the console. Web login sessions are not proxy API keys.
+Plugin model routers do not reroute calls in this mode: a selected channel cannot
+silently become another provider or an external plugin-owned execution route.
+
+Publishing or withdrawing a channel updates its credential metadata and model
+registrations. Individual credentials can be disabled or removed. An optional
+`enabled_models` array selects which base model names a credential publishes;
+omitting it publishes all discovered models. An empty array publishes none.
+The console's empty model editor restores the full discovered model set.
+
+Existing credential files are not silently reassigned. They remain unclaimed and
+are not shared until an administrator explicitly assigns them to a channel.
+Config-backed upstream API keys remain managed in server configuration and are
+not claimable through the console. The feature does not edit `/v0/management`.
+
+Realtime voice/WebRTC and `/v1/live` are explicitly unavailable in multi-user mode
+(HTTP 501): those existing paths bypass channel model selection and do not expose
+complete token accounting. Chat, Messages, Gemini and Responses use the normal
+channel-aware execution pipeline. Responses WebSocket uses the same routing checks.
+
+## What the logs mean
+
+The console has two related records:
+
+- **Client calls** record the final HTTP status, endpoint, requested model, caller,
+  key name, and elapsed time, including failures before any upstream execution.
+- **Usage records** describe each upstream attempt, with the caller, key identity,
+  credential owner, channel, credential identity, model, streaming flag, status,
+  input/output/cache/reasoning tokens, elapsed time, and trace/request IDs. Retries
+  remain separate, so usage is attributed to the credential actually attempted.
+
+Attribution is captured before execution, not resolved later from a mutable key
+or credential record. Revoking a key or deleting a credential does not remove its
+history. Usage plugins run asynchronously; a completed call may appear shortly
+before its usage record. The journal remains independent of the existing
+`usage-statistics-enabled` Redis queue toggle.
+
+Summary call counts deduplicate trace IDs among matching upstream records. They
+are not the count of all client calls; early failures are in the client-call table.
+Model-side usage (for example, image-tool usage) can produce additional usage
+records. Summary Token totals use the existing non-overlapping canonical token
+breakdown where it is complete. Missing token information is shown as unknown,
+not converted to an estimated charge.
+
+**Subscription quota is separate from Token usage.** The credential page exposes
+provider-supported passive quota signals and their observation timestamps, plus
+per-model signals. It does not invent a remaining balance or assume a fixed
+Token-to-subscription-message ratio. Providers with no quota observation are shown
+as having no upstream data.
+
+Audit entries contain actor, action, object, time, result status and client IP.
+They never contain passwords, raw API keys, OAuth codes or credential payloads.
+Account management traffic is excluded from request-body logging. Account session
+operations are attributable; writes made with the old shared management password
+are necessarily attributed to `management-key`, not a named person.
+
+## Persistence and backup
+
+`accounts.db` is an atomically replaced JSON state file containing users, bcrypt
+password hashes, hashed sessions, key records, invitations, channel definitions
+(including slug prefix, `public` flag, announcement, and per-credential-type
+index counters) and channel board messages.
+`journal/YYYY-MM-DD.jsonl` is the append-and-sync event journal. Both are under
+`multi-user.data-dir`; back up this directory together with upstream auth files.
+The journal is retained until you remove it, with no automatic history expiration.
+Queries filter by UTC dates and scan the relevant daily files; this deliberately
+avoids adding a database dependency for a small site.
+
+## HTTP API
+
+The account API base is `/v8/hub`. Protected endpoints accept
+`Authorization: Bearer <login-session-token>`.
+
+| Path | Methods | Access / purpose |
+| --- | --- | --- |
+| `/status` | GET | Public; reports whether first-account setup is needed. |
+| `/register`, `/login` | POST | Public; register accepts `username`, `password` and `invite` only. Invitation required except first account. |
+| `/me` | GET | Read account identity; usernames are immutable. |
+| `/me/password`, `/logout` | POST | Change own password / end own session. |
+| `/keys`, `/keys/:id` | GET, POST / PATCH, DELETE | Personal keys; delete revokes and retains history. |
+| `/channels`, `/channels/:id` | GET, POST / PATCH | Create with `slug` and optional `public`. PATCH accepts only `published`, `announcement` (channel managers) and `public` (owner/admin only); the identifier is immutable. |
+| `/channels/:id` | DELETE | Owner/admin removes an empty channel (409 while credentials/providers are still mounted); board messages are removed with it. |
+| `/channels/:id/messages` | GET, POST | Channel message board; all members read/post, cursor paging via `before_id`/`limit`. |
+| `/channels/:id/messages/:mid` | DELETE | Author or channel manager removes a board message. |
+| `/providers` | POST | Mount an AI provider into a channel (`channel_id` query, body `name`/`base_url`/`api_key`/optional `proxy_url`/`models`). |
+| `/providers/discover` | POST | Fetch an upstream `/models` list with the given base URL and key (15s timeout). |
+| `/providers/:route_id` | PATCH | Edit label/base URL/models/proxy; empty `api_key` keeps the stored key. Delete reuses `/credentials/:route_id`. |
+| `/credentials` | GET, POST | Public-to-members summaries; upload to an owned channel. |
+| `/credentials/:route_id` | PATCH, DELETE | Owner/admin operations. |
+| `/credentials/:route_id/download` | GET | Owner/admin credential export; never public. |
+| `/credentials/:route_id/fields` | PATCH | Original details-editor settings, excluding owner/prefix/token fields. |
+| `/credentials/:route_id/refresh` | POST | Original credential refresh, without returning tokens. |
+| `/credentials/:route_id/api-call` | POST | Member quota queries: proxies GET/POST to the credential provider's allowlisted quota endpoints (host+path checked per provider, `$TOKEN$` substituted server-side, never echoed). Powers the credential-card quota section in account mode. |
+| `/credentials/:route_id/claim` | POST | Administrator assigns an unclaimed file to a channel. |
+| `/marketplace` | GET | Published channel models with owner/provider information. |
+| `/marketplace/performance` | GET | Trailing-24h per-model usage aggregates (requests, failures, latency/TTFT sums, output tokens, generation time) in hourly buckets, powering the marketplace performance dialog (TPS, avg latency, success rate, per-channel table, trends). |
+| `/oauth/auth-url`, `/oauth/status` | GET | Start provider login for a channel / poll its state. |
+| `/oauth/callback` | GET, POST | Submit an OAuth callback; validates pending state. |
+| `/oauth/session` | DELETE | Cancel a pending OAuth flow. |
+| `/users`, `/users/:username` | GET / PATCH | All-member directory / admin `role` or `disabled` changes only. |
+| `/invites`, `/invites/:id` | GET, POST / DELETE | Administrator invitation issue/list/revoke. |
+| `/usage`, `/usage/summary`, `/calls`, `/audit` | GET | All-member persistent usage and operation history. |
+
+Credential `route_id` values are URL-safe base64 encodings of runtime credential
+IDs, returned by `/credentials`; opaque IDs prevent path separators from becoming
+route segments. Upload accepts multipart `file` or raw JSON with `name`, and a
+required `channel_id` query parameter. Credential and marketplace summaries expose
+the canonical channel identifier as `channel_slug`, not a separate `channel_name`.
+Account and channel create/update requests reject removed name fields and
+immutable identity fields. Model editor PATCH accepts `enabled_models` or
+`all_models: true`. Clients select a channel through the model ID, not headers.
+
+History filters: `consumer`, `owner`, `channel_id`, `credential_id`, `key_id`,
+`model`, `from`, `to`, `page`, `page_size` (maximum 200). Dates are RFC3339; `from`
+is inclusive and `to` is exclusive. Audit filters additionally include `actor`
+and `action`. Owner/channel/credential filters apply to upstream usage, not the
+client-call table, because early client errors have no serving credential.

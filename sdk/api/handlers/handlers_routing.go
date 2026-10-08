@@ -157,6 +157,9 @@ func (h *BaseAPIHandler) providersForExecution(modelName, originalRequestedModel
 }
 
 func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowImageModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
+	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel && !strings.Contains(thinking.ParseSuffix(modelName).ModelName, "/") {
+		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadRequest, Error: errors.New(`{"error":{"message":"select a channel-prefixed model from the marketplace","type":"invalid_request_error","code":"channel_required","param":"model"}}`)}
+	}
 	resolvedModelName := modelName
 	initialSuffix := thinking.ParseSuffix(modelName)
 	if initialSuffix.ModelName == "auto" {
@@ -324,6 +327,9 @@ func modelRoutersEnabled(host PluginModelRouterHost, skipPluginID string) bool {
 
 func (h *BaseAPIHandler) applyModelRouter(ctx context.Context, handlerType, modelName string, rawJSON []byte, stream bool, execOptions modelExecutionOptions) modelRouteDecision {
 	var decision modelRouteDecision
+	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel {
+		return decision
+	}
 	host := h.modelRouterHost()
 	if host == nil || !modelRoutersEnabled(host, execOptions.SkipRouterPluginID) {
 		return decision
