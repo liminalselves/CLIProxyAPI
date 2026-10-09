@@ -62,6 +62,19 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if errAuth != nil || result.Principal != first.ID || result.Metadata["username"] != "bob" {
 		t.Fatalf("provider identity: %#v %v", result, errAuth)
 	}
+	if result.Metadata["key_auto_balance"] != "false" {
+		t.Fatalf("auto balance metadata = %v, want false", result.Metadata["key_auto_balance"])
+	}
+	enable := true
+	if err := s.UpdateKey(bob, first.ID, nil, nil, &enable, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, key, ok := s.AuthenticateKey(secret); !ok || !key.AutoBalance {
+		t.Fatal("auto balance flag not applied to the key")
+	}
+	if result, errAuth = provider.Authenticate(context.Background(), request); errAuth != nil || result.Metadata["key_auto_balance"] != "true" {
+		t.Fatalf("auto balance metadata: %#v %v", result, errAuth)
+	}
 	_, sessionToken, err := s.Login(bob.Username, "password-bob")
 	if err != nil {
 		t.Fatal(err)
@@ -73,8 +86,8 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if _, ok := reopened.AuthenticateSession(sessionToken); !ok {
 		t.Fatal("session did not survive restart")
 	}
-	if _, _, ok := reopened.AuthenticateKey(secret); !ok {
-		t.Fatal("key did not survive restart")
+	if _, key, ok := reopened.AuthenticateKey(secret); !ok || !key.AutoBalance {
+		t.Fatal("key or its auto balance flag did not survive restart")
 	}
 	raw, err := os.ReadFile(filepath.Join(s.dir, "accounts.db"))
 	if err != nil {
@@ -83,7 +96,7 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if strings.Contains(string(raw), secret) || strings.Contains(string(raw), sessionToken) || strings.Contains(string(raw), "password-bob") {
 		t.Fatal("account store contains plaintext key, session, or password")
 	}
-	if err := s.UpdateKey(admin, first.ID, nil, nil, true); err != nil {
+	if err := s.UpdateKey(admin, first.ID, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, ok := s.AuthenticateKey(secret); ok {
@@ -232,7 +245,7 @@ func TestChannelsAndKeysEnforceOwnerWithAdminOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpdateKey(bob, key.ID, nil, nil, true); !errors.Is(err, ErrDenied) {
+	if err := s.UpdateKey(bob, key.ID, nil, nil, nil, true); !errors.Is(err, ErrDenied) {
 		t.Fatal("member revoked another user's key")
 	}
 }

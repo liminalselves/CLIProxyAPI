@@ -2265,6 +2265,8 @@
     "apply_filter": "Применить",
     "audit": "Audit log",
     "audit_hint": "Account, key, channel and credential operations are visible to all members; passwords and credentials are never logged.",
+    "auto_balance": "Распределение нагрузки",
+    "auto_balance_hint": "Ключи с распределением нагрузки могут вызывать модели по короткому имени (например kimi-k3): запросы равномерно распределяются между всеми ключами доступа сайта с этой моделью, при сбое автоматически пробуется следующий, пока не будут исчерпаны все. Когда выключено, используйте идентификаторы вида канал-ключ/модель.",
     "availability_hint": "Почасовая доля успешных запросов",
     "availability_trend": "Доступность (24 часа)",
     "available": "Available",

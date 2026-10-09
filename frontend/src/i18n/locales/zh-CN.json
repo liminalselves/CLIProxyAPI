@@ -2269,6 +2269,8 @@
     "apply_filter": "查询",
     "audit": "操作日志",
     "audit_hint": "账户、Key、渠道和凭证操作全员可查，不记录密码或凭证内容。",
+    "auto_balance": "均匀负载",
+    "auto_balance_hint": "开启均匀负载的 Key 可以直接用模型名调用（如 kimi-k3），请求会均匀分摊到全站所有提供该模型的凭证，失败时自动换下一个，全部试完才报错。关闭后仍需使用「渠道-凭证/模型名」。",
     "availability_hint": "按小时采样的请求成功率",
     "availability_trend": "可用率（最近 24 小时）",
     "available": "可调用",

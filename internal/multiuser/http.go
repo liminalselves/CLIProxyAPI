@@ -225,18 +225,19 @@ func (h *Controller) createKey(c *gin.Context) {
 
 func (h *Controller) updateKey(c *gin.Context) {
 	var body struct {
-		Name     *string `json:"name"`
-		Disabled *bool   `json:"disabled"`
+		Name        *string `json:"name"`
+		Disabled    *bool   `json:"disabled"`
+		AutoBalance *bool   `json:"auto_balance"`
 	}
 	if !bind(c, &body) {
 		return
 	}
 	h.record(c, "key.update", c.Param("id"))
-	if body.Name == nil && body.Disabled == nil {
+	if body.Name == nil && body.Disabled == nil && body.AutoBalance == nil {
 		replyError(c, ErrInvalid)
 		return
 	}
-	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), body.Name, body.Disabled, false); err != nil {
+	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), body.Name, body.Disabled, body.AutoBalance, false); err != nil {
 		replyError(c, err)
 		return
 	}
@@ -245,7 +246,7 @@ func (h *Controller) updateKey(c *gin.Context) {
 
 func (h *Controller) deleteKey(c *gin.Context) {
 	h.record(c, "key.revoke", c.Param("id"))
-	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), nil, nil, true); err != nil {
+	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), nil, nil, nil, true); err != nil {
 		replyError(c, err)
 		return
 	}

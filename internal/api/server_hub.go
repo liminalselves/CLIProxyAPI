@@ -14,6 +14,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -147,6 +148,9 @@ func (s *Server) hubRequestMiddleware() gin.HandlerFunc {
 		if errAuth != nil {
 			c.AbortWithStatusJSON(errAuth.HTTPStatusCode(), gin.H{"error": errAuth.Message})
 			return
+		}
+		if keyAutoBalance := result.Metadata["key_auto_balance"] == "true"; keyAutoBalance {
+			c.Request = c.Request.WithContext(coreauth.WithBareModelsAllowed(c.Request.Context()))
 		}
 		a := usage.Attribution{SiteID: result.Metadata["site_id"], Consumer: result.Metadata["username"], KeyID: result.Metadata["key_id"], KeyName: result.Metadata["key_name"]}
 		c.Request = c.Request.WithContext(usage.WithAttribution(c.Request.Context(), a))

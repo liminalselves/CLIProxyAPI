@@ -498,6 +498,9 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 	}
 	if requestCtx != nil {
 		parentCtx = coreusage.WithAttribution(parentCtx, coreusage.AttributionFromContext(requestCtx))
+		if coreauth.BareModelsAllowed(requestCtx) {
+			parentCtx = coreauth.WithBareModelsAllowed(parentCtx)
+		}
 	}
 	newCtx, cancel := context.WithCancel(parentCtx)
 

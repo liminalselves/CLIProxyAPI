@@ -98,7 +98,7 @@ func excludeExecutionProvider(providers []string, excluded string) []string {
 }
 
 func (h *BaseAPIHandler) getRequestDetails(modelName string) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
-	return h.getRequestDetailsWithOptions(modelName, false)
+	return h.getRequestDetailsWithOptions(modelName, false, false)
 }
 
 func validateNativeInteractionsExecution(entryProtocol string, execOptions modelExecutionOptions, routeDecision modelRouteDecision) *interfaces.ErrorMessage {
@@ -153,11 +153,11 @@ func (h *BaseAPIHandler) providersForExecution(modelName, originalRequestedModel
 		}
 		return []string{routeDecision.Provider}, normalizedModel, nil
 	}
-	return h.getRequestDetailsWithOptions(modelName, allowImageModel)
+	return h.getRequestDetailsWithOptions(modelName, allowImageModel, execOptions.AllowBareChannelModel)
 }
 
-func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowImageModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
-	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel && !strings.Contains(thinking.ParseSuffix(modelName).ModelName, "/") {
+func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowImageModel, allowBareModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
+	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel && !allowBareModel && !strings.Contains(thinking.ParseSuffix(modelName).ModelName, "/") {
 		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadRequest, Error: errors.New(`{"error":{"message":"select a channel-prefixed model from the marketplace","type":"invalid_request_error","code":"channel_required","param":"model"}}`)}
 	}
 	resolvedModelName := modelName
@@ -200,6 +200,11 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowIma
 	// custom model registrations that include thinking suffixes.
 	if len(providers) == 0 && baseModel != resolvedModelName {
 		providers = util.GetProviderName(resolvedModelName)
+	}
+	// Bare base model names in multi-user mode are registered only under channel
+	// prefixes, so resolve their providers from the credentials publishing them.
+	if len(providers) == 0 && allowBareModel && h != nil && h.AuthManager != nil {
+		providers = h.AuthManager.ProvidersForBaseModel(baseModel)
 	}
 
 	if len(providers) == 0 {

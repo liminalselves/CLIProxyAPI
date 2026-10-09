@@ -40,13 +40,17 @@ type userRecord struct {
 }
 
 type APIKey struct {
-	ID        string     `json:"id"`
-	Owner     string     `json:"owner"`
-	Name      string     `json:"name"`
-	Hint      string     `json:"hint"`
-	Disabled  bool       `json:"disabled"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID    string `json:"id"`
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+	Hint  string `json:"hint"`
+	// AutoBalance lets the key call bare base model names; requests are spread
+	// evenly across every published credential serving that model, with
+	// failover to the remaining ones when an attempt fails.
+	AutoBalance bool       `json:"auto_balance"`
+	Disabled    bool       `json:"disabled"`
+	CreatedAt   time.Time  `json:"created_at"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
 }
 
 type keyRecord struct {
@@ -451,7 +455,7 @@ func (s *Store) Keys(actor User) []APIKey {
 	return out
 }
 
-func (s *Store) UpdateKey(actor User, id string, name *string, disabled *bool, revoke bool) error {
+func (s *Store) UpdateKey(actor User, id string, name *string, disabled, autoBalance *bool, revoke bool) error {
 	return s.mutate(func(d *state) error {
 		key, ok := d.Keys[id]
 		if !ok || key.RevokedAt != nil {
@@ -469,6 +473,9 @@ func (s *Store) UpdateKey(actor User, id string, name *string, disabled *bool, r
 		}
 		if disabled != nil {
 			key.Disabled = *disabled
+		}
+		if autoBalance != nil {
+			key.AutoBalance = *autoBalance
 		}
 		if revoke {
 			now := s.now().UTC()

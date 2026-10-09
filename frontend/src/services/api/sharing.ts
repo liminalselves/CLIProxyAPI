@@ -92,7 +92,7 @@ export const sharingApi = {
   keys: () => apiClient.get<{ keys: PersonalKey[] }>(sharingPath('/keys')),
   createKey: (name: string) =>
     apiClient.post<{ key: PersonalKey; secret: string }>(sharingPath('/keys'), { name }),
-  updateKey: (id: string, body: { name?: string; disabled?: boolean }) =>
+  updateKey: (id: string, body: { name?: string; disabled?: boolean; auto_balance?: boolean }) =>
     apiClient.patch(sharingPath(`/keys/${encodeURIComponent(id)}`), body),
   revokeKey: (id: string) => apiClient.delete(sharingPath(`/keys/${encodeURIComponent(id)}`)),
   users: () => apiClient.get<{ users: Account[] }>(sharingPath('/users')),

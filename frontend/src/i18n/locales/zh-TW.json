@@ -2295,6 +2295,8 @@
     "apply_filter": "查詢",
     "audit": "操作日誌",
     "audit_hint": "帳戶、Key、渠道和憑證操作全員可查，不記錄密碼或憑證內容。",
+    "auto_balance": "均勻負載",
+    "auto_balance_hint": "開啟均勻負載的 Key 可以直接用模型名呼叫（如 kimi-k3），請求會均勻分攤到全站所有提供該模型的憑證，失敗時自動換下一個，全部試完才報錯。關閉後仍需使用「渠道-憑證/模型名」。",
     "availability_hint": "按小時採樣的請求成功率",
     "availability_trend": "可用率（最近 24 小時）",
     "available": "可呼叫",

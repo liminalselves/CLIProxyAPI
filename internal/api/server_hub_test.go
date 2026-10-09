@@ -273,6 +273,24 @@ func TestHubAccountsCredentialsRoutingAndTransparentUsage(t *testing.T) {
 		t.Fatalf("channel routed to a different owner: %#v", exec.selected)
 	}
 	exec.mu.Unlock()
+	var createdKey struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(keyBody["key"], &createdKey); err != nil {
+		t.Fatal(err)
+	}
+	request("POST", "/v1/chat/completions", bobKey, `{"model":"gpt-5","messages":[]}`, 400)
+	request("PATCH", "/v8/hub/keys/"+createdKey.ID, bobSession, `{"auto_balance":true}`, 200)
+	request("POST", "/v1/chat/completions", bobKey, `{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}`, 200)
+	request("POST", "/v1/chat/completions", bobKey, `{"model":"gpt-5(stream)","messages":[{"role":"user","content":"hi"}]}`, 200)
+	exec.mu.Lock()
+	bareAttempts := len(exec.selected)
+	exec.mu.Unlock()
+	if bareAttempts != 4 {
+		t.Fatalf("bare model calls did not route through the channel credential: %d attempts", bareAttempts)
+	}
+	request("PATCH", "/v8/hub/keys/"+createdKey.ID, bobSession, `{"auto_balance":false}`, 200)
+	request("POST", "/v1/chat/completions", bobKey, `{"model":"gpt-5","messages":[]}`, 400)
 	request("PATCH", "/v8/hub/credentials/"+aliceRoute, aliceSession, `{"enabled_models":["gpt-5"]}`, 200)
 	listed = request("GET", "/v1/models", bobKey, "", 200)
 	if strings.Contains(string(listed["data"]), "gpt-codex#1/gpt-4") {
@@ -305,7 +323,7 @@ func TestHubAccountsCredentialsRoutingAndTransparentUsage(t *testing.T) {
 		t.Fatal("restart changed the account or channel identity")
 	}
 	total, _, err = reopened.Summary(multiuser.Filter{Owner: "alice"})
-	if err != nil || total.TotalTokens != 20 {
+	if err != nil || total.TotalTokens != 40 {
 		t.Fatalf("restart usage: %#v %v", total, err)
 	}
 	request("GET", "/hub.html", "", "", 302)

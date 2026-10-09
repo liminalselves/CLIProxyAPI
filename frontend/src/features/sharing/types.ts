@@ -30,6 +30,7 @@ export interface PersonalKey {
   owner: string;
   name: string;
   hint: string;
+  auto_balance: boolean;
   disabled: boolean;
   created_at: string;
 }

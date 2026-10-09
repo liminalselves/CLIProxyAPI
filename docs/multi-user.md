@@ -129,10 +129,19 @@ and allocation. Announcements are capped at 5000 characters, board messages at
 pruned on insert. Messages can be deleted by their author or a channel manager;
 they cannot be edited.
 
-Bare model IDs and automatic cross-channel selection are not supported. The
-console enforces this independently of `routing.force-model-prefix`. In multi-user
-mode the legacy `access.api-keys` list does not authenticate proxy callers: use
-personal keys created in the console. Web login sessions are not proxy API keys.
+A key can opt into **even load balancing** (`auto_balance`, toggled per key in the
+console). Such keys may call a bare base model name directly, for example
+`kimi-k3` instead of `573-kimi#1/kimi-k3`. Each request is spread round-robin
+across every published credential serving that model across all channels, and a
+failed attempt fails over to the next credential until all have been tried.
+Chat, Messages, Gemini and Responses requests plus the image endpoints
+(`/v1/images/generations`, `/v1/images/edits`) follow this routing. Bare names
+are not listed in `/v1/models`; the marketplace shows the base model names to
+use. For keys without the flag, bare model IDs and automatic cross-channel
+selection are not supported, and the console enforces this independently of
+`routing.force-model-prefix`. In multi-user mode the legacy `access.api-keys`
+list does not authenticate proxy callers: use personal keys created in the
+console. Web login sessions are not proxy API keys.
 Plugin model routers do not reroute calls in this mode: a selected channel cannot
 silently become another provider or an external plugin-owned execution route.
 
@@ -217,7 +226,7 @@ The account API base is `/v8/hub`. Protected endpoints accept
 | `/register`, `/login` | POST | Public; register accepts `username`, `password` and `invite` only. Invitation required except first account. |
 | `/me` | GET | Read account identity; usernames are immutable. |
 | `/me/password`, `/logout` | POST | Change own password / end own session. |
-| `/keys`, `/keys/:id` | GET, POST / PATCH, DELETE | Personal keys; delete revokes and retains history. |
+| `/keys`, `/keys/:id` | GET, POST / PATCH, DELETE | Personal keys; delete revokes and retains history. PATCH accepts `name`, `disabled` and `auto_balance` (bare base model names with even load balancing). |
 | `/channels`, `/channels/:id` | GET, POST / PATCH | Create with `slug` and optional `public`. PATCH accepts only `published`, `announcement` (channel managers) and `public` (owner/admin only); the identifier is immutable. |
 | `/channels/:id` | DELETE | Owner/admin removes an empty channel (409 while credentials/providers are still mounted); board messages are removed with it. |
 | `/channels/:id/messages` | GET, POST | Channel message board; all members read/post, cursor paging via `before_id`/`limit`. |

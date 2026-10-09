@@ -27,6 +27,9 @@ type modelExecutionOptions struct {
 	AuthSelectionModel      string
 	ProxyURL                string
 	Path                    string
+	// AllowBareChannelModel permits bare base model names in multi-user mode for
+	// keys with the bare-model grant; filled from the request context.
+	AllowBareChannelModel bool
 }
 
 // ProtocolExecutionRequest describes a route-level model execution request with explicit protocols.

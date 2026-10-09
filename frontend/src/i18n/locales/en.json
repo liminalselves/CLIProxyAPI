@@ -2271,6 +2271,8 @@
     "apply_filter": "Apply",
     "audit": "Audit log",
     "audit_hint": "Account, key, channel and credential operations are visible to all members; passwords and credentials are never logged.",
+    "auto_balance": "Even load",
+    "auto_balance_hint": "Keys with even load can call bare model names (for example kimi-k3). Requests are spread evenly across every credential serving that model; on failure the next one is tried until all are exhausted. When off, keep using channel-credential/model IDs.",
     "availability_hint": "Hourly sampled request success rate",
     "availability_trend": "Availability (last 24 hours)",
     "available": "Available",

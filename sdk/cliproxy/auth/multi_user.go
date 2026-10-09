@@ -1,6 +1,9 @@
 package auth
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 func (a *Auth) Owner() string     { return a.metadataString("owner") }
 func (a *Auth) ChannelID() string { return a.metadataString("channel_id") }
@@ -46,4 +49,25 @@ func (a *Auth) ChannelModelEnabled(model string) bool {
 		}
 	}
 	return false
+}
+
+type bareModelsContextKey struct{}
+
+// WithBareModelsAllowed marks a request as permitted to call bare base model
+// names in multi-user mode. Callers spread evenly across every published
+// credential serving that model, with failover until all are tried.
+func WithBareModelsAllowed(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, bareModelsContextKey{}, true)
+}
+
+// BareModelsAllowed reports whether the request carries the bare-model grant.
+func BareModelsAllowed(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	allowed, _ := ctx.Value(bareModelsContextKey{}).(bool)
+	return allowed
 }

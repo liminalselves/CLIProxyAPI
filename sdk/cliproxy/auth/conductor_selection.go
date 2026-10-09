@@ -997,17 +997,36 @@ func (m *Manager) pickViaPluginScheduler(ctx context.Context, scheduler PluginSc
 	return m.pickViaBuiltinScheduler(ctx, strategy, providerKey, providers, model, opts, tried)
 }
 
+// authSupportsRouteModel reports whether the auth can serve the requested route
+// model. In multi-user mode a pinned "prefix/model" request stays bound to the
+// channel prefix, while a bare base model request (allowed only for keys with
+// the bare-model grant) matches every published credential that exposes the
+// same base model under its own prefix.
 func (m *Manager) authSupportsRouteModel(registryRef *registry.ModelRegistry, auth *Auth, routeModel string) bool {
+	routeKey := canonicalModelKey(routeModel)
+	registryKey := routeKey
 	if cfg, ok := m.runtimeConfig.Load().(*internalconfig.Config); ok && cfg != nil && cfg.MultiUser.Enabled {
-		if auth == nil || !auth.ChannelPublished() || !strings.HasPrefix(canonicalModelKey(routeModel), auth.Prefix+"/") || !auth.ChannelModelEnabled(canonicalModelKey(routeModel)) {
+		if auth == nil || routeKey == "" || !auth.ChannelPublished() {
 			return false
+		}
+		if strings.HasPrefix(routeKey, auth.Prefix+"/") {
+			if !auth.ChannelModelEnabled(routeKey) {
+				return false
+			}
+		} else {
+			registryKey = auth.Prefix + "/" + routeKey
+			if !auth.ChannelModelEnabled(registryKey) {
+				return false
+			}
 		}
 	}
 	if registryRef == nil || auth == nil {
 		return true
 	}
-	routeKey := canonicalModelKey(routeModel)
 	if routeKey == "" {
+		return true
+	}
+	if registryKey != routeKey && registryRef.ClientSupportsModel(auth.ID, registryKey) {
 		return true
 	}
 	if registryRef.ClientSupportsModel(auth.ID, routeKey) {
@@ -1015,6 +1034,52 @@ func (m *Manager) authSupportsRouteModel(registryRef *registry.ModelRegistry, au
 	}
 	selectionKey := m.selectionModelKeyForAuth(auth, routeModel)
 	return selectionKey != "" && selectionKey != routeKey && registryRef.ClientSupportsModel(auth.ID, selectionKey)
+}
+
+// ProvidersForBaseModel returns the provider keys of every non-disabled
+// credential that publishes the given bare base model under its channel
+// prefix, ordered by credential count (descending) then name. It backs bare
+// model requests from keys with the bare-model grant in multi-user mode.
+func (m *Manager) ProvidersForBaseModel(model string) []string {
+	if m == nil {
+		return nil
+	}
+	modelKey := canonicalModelKey(model)
+	if modelKey == "" {
+		return nil
+	}
+	registryRef := registry.GetGlobalRegistry()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	counts := make(map[string]int)
+	for _, auth := range m.auths {
+		if auth == nil || auth.Disabled || auth.Status == StatusDisabled || !auth.ChannelPublished() {
+			continue
+		}
+		pinnedKey := auth.Prefix + "/" + modelKey
+		if !auth.ChannelModelEnabled(pinnedKey) || !registryRef.ClientSupportsModel(auth.ID, pinnedKey) {
+			continue
+		}
+		providerKey := executorKeyFromAuth(auth)
+		if providerKey == "" {
+			continue
+		}
+		counts[providerKey]++
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	providers := make([]string, 0, len(counts))
+	for providerKey := range counts {
+		providers = append(providers, providerKey)
+	}
+	sort.Slice(providers, func(i, j int) bool {
+		if counts[providers[i]] == counts[providers[j]] {
+			return providers[i] < providers[j]
+		}
+		return counts[providers[i]] > counts[providers[j]]
+	})
+	return providers
 }
 
 func (m *Manager) normalizeProviders(providers []string) []string {

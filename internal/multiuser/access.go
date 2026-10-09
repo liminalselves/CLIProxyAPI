@@ -27,7 +27,11 @@ func (p *AccessProvider) Authenticate(_ context.Context, r *http.Request) (*sdka
 		provided = true
 		user, key, ok := p.Store.AuthenticateKey(value)
 		if ok {
-			return &sdkaccess.Result{Provider: AccessProviderID, Principal: key.ID, Metadata: map[string]string{"site_id": p.Store.SiteID(), "username": user.Username, "key_id": key.ID, "key_name": key.Name}}, nil
+			autoBalance := "false"
+			if key.AutoBalance {
+				autoBalance = "true"
+			}
+			return &sdkaccess.Result{Provider: AccessProviderID, Principal: key.ID, Metadata: map[string]string{"site_id": p.Store.SiteID(), "username": user.Username, "key_id": key.ID, "key_name": key.Name, "key_auto_balance": autoBalance}}, nil
 		}
 	}
 	if !provided {
