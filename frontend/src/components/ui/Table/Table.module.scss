@@ -10,6 +10,7 @@
 
 .scroll {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
@@ -31,6 +32,7 @@
     padding: 10px 14px;
     border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
+    white-space: nowrap;
   }
 
   th.alignRight {
@@ -50,6 +52,13 @@
     border-bottom: 1px solid var(--border-color);
     vertical-align: top;
     line-height: 1.5;
+
+    // On narrow screens columns get squeezed into one-character lines;
+    // keep each line intact so the table overflows the scroll container
+    // and scrolls horizontally instead.
+    @include mobile {
+      white-space: nowrap;
+    }
   }
 
   &:hover td {

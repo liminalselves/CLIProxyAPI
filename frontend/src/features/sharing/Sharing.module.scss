@@ -72,6 +72,64 @@
   margin-top: auto;
   padding-top: $spacing-md;
   border-top: 1px solid var(--border-color);
+
+  // Keep the whole action row (incl. delete) on one line at typical card
+  // widths; compact padding so five buttons fit a ~300px content width.
+  .actions {
+    gap: $spacing-xs;
+  }
+
+  :global(.btn-sm) {
+    padding: 6px 8px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
+
+.keyCards {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.keyCard {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  padding: $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-primary);
+}
+
+.keyCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.keyCardBalance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+}
+
+.keyCardActions {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: $spacing-xs;
+  padding-top: $spacing-md;
+  border-top: 1px solid var(--border-color);
+
+  :global(.btn) {
+    flex: 1;
+    justify-content: center;
+    white-space: nowrap;
+  }
 }
 
 .detailLayout {
@@ -454,8 +512,6 @@
     code {
       font-family: $font-mono;
       font-size: 12px;
-      white-space: normal;
-      overflow-wrap: anywhere;
     }
   }
 

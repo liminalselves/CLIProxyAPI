@@ -58,6 +58,7 @@ function ChannelCredentialCard({
       </div>
       <AuthFileCard
         file={file}
+        displayName={file.channel?.trim() || undefined}
         compact={false}
         selected={false}
         resolvedTheme={resolvedTheme}

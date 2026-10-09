@@ -23,9 +23,12 @@ interface MarketplacePerformanceProps {
   onClose: () => void;
 }
 
-const hourLabel = (unix: number): string => {
+const hourLabel = (unix: number, withDate = false): string => {
   const at = new Date(unix * 1000);
-  return `${String(at.getHours()).padStart(2, '0')}:00`;
+  const hour = `${String(at.getHours()).padStart(2, '0')}:00`;
+  if (!withDate) return hour;
+  const day = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+  return `${day} ${hour}`;
 };
 
 interface TrendChartProps {
@@ -56,6 +59,12 @@ function TrendChart({ buckets, pick, format, tone, label }: TrendChartProps) {
     [buckets, pick]
   );
   const values = points.map((point) => point.value).filter((value): value is number => value !== null);
+  // A trailing 24h window usually crosses midnight, so bare HH:00 axis labels
+  // read backwards (e.g. 09:00 → 08:00); include the date in that case.
+  const spansDays =
+    buckets.length > 1 &&
+    new Date(buckets[0].start * 1000).toDateString() !==
+      new Date(buckets[buckets.length - 1].start * 1000).toDateString();
   if (!values.length) {
     return <div className={styles.chartEmpty}>{t('sharing.no_performance')}</div>;
   }
@@ -100,14 +109,14 @@ function TrendChart({ buckets, pick, format, tone, label }: TrendChartProps) {
               cy={y(point.value)}
               r={3}
             >
-              <title>{`${hourLabel(point.start)} · ${format(point.value)}`}</title>
+              <title>{`${hourLabel(point.start, true)} · ${format(point.value)}`}</title>
             </circle>
           )
         )}
       </svg>
       <div className={styles.chartAxis}>
-        <span>{hourLabel(buckets[0].start)}</span>
-        <span>{hourLabel(buckets[buckets.length - 1].start)}</span>
+        <span>{hourLabel(buckets[0].start, spansDays)}</span>
+        <span>{hourLabel(buckets[buckets.length - 1].start, spansDays)}</span>
       </div>
     </figure>
   );

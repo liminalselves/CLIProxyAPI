@@ -71,6 +71,14 @@ function detectPreset(from: string, to: string): RangePreset {
 }
 
 const stripJsonExt = (name: string) => name.replace(/\.json$/i, '');
+// Channel-mounted credential files are named "<channel>-<type>#<n>-<internal>.json";
+// the pinned prefix alone identifies the credential, the rest is internal.
+const credentialDisplayName = (name: string) =>
+  stripJsonExt(name).replace(/^(.+#\d+)-[^#]+$/, '$1');
+// Hub-mounted AI providers record the internal route ID
+// ("<type>-hub-ch-<channelID>-<name>") as provider; only the type is
+// meaningful to readers.
+const providerBadgeLabel = (provider: string) => provider.split('-hub-ch-', 1)[0] || provider;
 const shortTrace = (id: string) => (id.length > 8 ? id.slice(0, 8) + '…' : id);
 const tokensPerSecond = (entry: UsageEntry) =>
   entry.tokens_known && entry.latency_ms > 0 && entry.output_tokens > 0
@@ -166,7 +174,7 @@ function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClos
           <Field label={t('sharing.field_key')}>{entry.key_name || '—'}</Field>
           <Field label={t('sharing.channel')}>{entry.channel}</Field>
           <Field label={t('sharing.field_credential')}>
-            {entry.credential_name ? stripJsonExt(entry.credential_name) : '—'}
+            {entry.credential_name ? credentialDisplayName(entry.credential_name) : '—'}
           </Field>
           <Field label={t('sharing.owner')}>{entry.owner}</Field>
           <Field label={t('sharing.field_model')}>
@@ -576,7 +584,7 @@ export function UsagePage() {
                       {entry.credential_name && (
                         <div className={styles.cellSecondary}>
                           {t('sharing.line_credential', {
-                            name: stripJsonExt(entry.credential_name),
+                            name: credentialDisplayName(entry.credential_name),
                           })}
                         </div>
                       )}
@@ -584,7 +592,7 @@ export function UsagePage() {
                     <TableCell>
                       <div className={styles.cellPrimary}>
                         {entry.provider && (
-                          <span className={styles.badge}>{entry.provider}</span>
+                          <span className={styles.badge}>{providerBadgeLabel(entry.provider)}</span>
                         )}{' '}
                         <span className={styles.mono}>{entry.model}</span>
                       </div>

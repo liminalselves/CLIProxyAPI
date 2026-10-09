@@ -382,17 +382,17 @@ textarea {
 
 @media (max-width: $breakpoint-mobile) {
   .modal-overlay {
-    padding: $spacing-md;
+    padding: $spacing-sm;
   }
 
   .modal {
-    max-height: calc(100vh - #{$spacing-md * 2});
+    max-height: calc(100vh - #{$spacing-sm * 2});
     border-radius: $radius-md;
   }
 
   @supports (height: 100dvh) {
     .modal {
-      max-height: calc(100dvh - #{$spacing-md * 2});
+      max-height: calc(100dvh - #{$spacing-sm * 2});
     }
   }
 
@@ -403,13 +403,11 @@ textarea {
 
   .modal-body {
     padding: $spacing-md;
-    max-height: min(60vh, calc(100vh - 180px));
-  }
-
-  @supports (height: 100dvh) {
-    .modal-body {
-      max-height: min(60dvh, calc(100dvh - 180px));
-    }
+    // Fill the modal instead of capping at 60vh, so tall content uses the
+    // whole screen on phones and scrolls inside the body.
+    max-height: none;
+    flex: 1;
+    min-height: 0;
   }
 
   .modal-footer {
