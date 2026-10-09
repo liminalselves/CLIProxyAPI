@@ -493,14 +493,18 @@ func codexDirectOpenAIImageEndpoint(req cliproxyexecutor.Request, opts cliproxye
 	if codexDirectOpenAIImageModel(req) == "" {
 		return ""
 	}
-	path := helps.PayloadRequestPath(opts)
-	if strings.HasSuffix(strings.TrimSpace(path), codexImagesGenerationsPath) {
-		return codexDirectImagesGenerations
-	}
-	if strings.HasSuffix(strings.TrimSpace(path), codexImagesEditsPath) {
+	path := strings.TrimSpace(helps.PayloadRequestPath(opts))
+	if strings.HasSuffix(path, codexImagesEditsPath) {
 		return codexDirectImagesEdit
 	}
-	return ""
+	if !strings.HasSuffix(path, codexImagesGenerationsPath) {
+		return ""
+	}
+	if len(codexGenerationsReferenceImages(req.Payload)) > 0 {
+		// Generations requests carrying reference images are forwarded as edits.
+		return codexDirectImagesEdit
+	}
+	return codexDirectImagesGenerations
 }
 
 func codexPrepareDirectOpenAIImageBody(req cliproxyexecutor.Request, opts cliproxyexecutor.Options, stream bool) ([]byte, string, string, error) {
@@ -521,7 +525,37 @@ func codexPrepareDirectOpenAIImagePayload(req cliproxyexecutor.Request, opts cli
 	if strings.HasSuffix(path, codexImagesEditsPath) {
 		return codexPrepareDirectOpenAIImageEditPayload(req.Payload, model, contentType, stream)
 	}
+	if images := codexGenerationsReferenceImages(req.Payload); len(images) > 0 {
+		return codexRewriteGenerationsReferenceImagesEdit(req.Payload, images, model, stream)
+	}
 	return prepareOpenAICompatImagesPayload(req.Payload, model, contentType, stream)
+}
+
+// codexRewriteGenerationsReferenceImagesEdit rewrites an images/generations
+// payload carrying reference images into the images/edits JSON shape: the
+// reference fields are folded into images[].image_url while every other
+// client field is preserved.
+func codexRewriteGenerationsReferenceImagesEdit(payload []byte, images []string, model string, stream bool) ([]byte, string, error) {
+	items := make([][]byte, 0, len(images))
+	for _, img := range images {
+		if strings.TrimSpace(img) == "" {
+			continue
+		}
+		item := []byte(`{"image_url":""}`)
+		item, _ = sjson.SetBytes(item, "image_url", img)
+		items = append(items, item)
+	}
+	out := payload
+	out, _ = sjson.DeleteBytes(out, "image")
+	out, _ = sjson.DeleteBytes(out, "images")
+	out, _ = sjson.SetRawBytes(out, "images", helps.JoinRawJSONArray(items))
+	out = helps.SetStringIfDifferent(out, "model", model)
+	if stream {
+		out = helps.SetBoolIfDifferent(out, "stream", true)
+	} else {
+		out, _ = sjson.DeleteBytes(out, "stream")
+	}
+	return out, "application/json", nil
 }
 
 func codexPrepareDirectOpenAIImageEditPayload(payload []byte, model string, contentType string, stream bool) ([]byte, string, error) {
@@ -741,9 +775,47 @@ func codexPrepareOpenAIImageRequest(req cliproxyexecutor.Request, opts cliproxye
 	return codexPrepareOpenAIImageEditJSON(req.Payload, req.Model)
 }
 
+// codexGenerationsReferenceImages extracts reference images from an
+// images/generations payload so the request can be forwarded as an image edit.
+// `image` accepts a single string or an array; `images` accepts the edits-style
+// array. Entries may be data/remote URLs or {image_url} objects.
+func codexGenerationsReferenceImages(rawJSON []byte) []string {
+	var images []string
+	appendImage := func(value gjson.Result) {
+		switch {
+		case value.Type == gjson.String:
+			if url := strings.TrimSpace(value.String()); url != "" {
+				images = append(images, url)
+			}
+		case value.IsObject():
+			if url := strings.TrimSpace(value.Get("image_url").String()); url != "" {
+				images = append(images, url)
+			}
+		}
+	}
+	if image := gjson.GetBytes(rawJSON, "image"); image.IsArray() {
+		for _, entry := range image.Array() {
+			appendImage(entry)
+		}
+	} else {
+		appendImage(image)
+	}
+	if entries := gjson.GetBytes(rawJSON, "images"); entries.IsArray() {
+		for _, entry := range entries.Array() {
+			appendImage(entry)
+		}
+	}
+	return images
+}
+
 func codexPrepareOpenAIImageGenerationJSON(rawJSON []byte, routeModel string) (codexOpenAIImagePreparedRequest, error) {
 	if !json.Valid(rawJSON) {
 		return codexOpenAIImagePreparedRequest{}, fmt.Errorf("invalid OpenAI image generation request JSON")
+	}
+	if images := codexGenerationsReferenceImages(rawJSON); len(images) > 0 {
+		// Generations requests carrying reference images are forwarded as edits;
+		// the stream prefix stays generation-shaped to match the called endpoint.
+		return codexPrepareOpenAIImageEditImages(rawJSON, routeModel, images, "image_generation")
 	}
 	prompt := strings.TrimSpace(gjson.GetBytes(rawJSON, "prompt").String())
 	tool := codexBuildOpenAIImageTool(rawJSON, routeModel, "generate", []string{"size", "quality", "background", "output_format", "moderation"}, []string{"output_compression", "partial_images"})
@@ -759,7 +831,6 @@ func codexPrepareOpenAIImageEditJSON(rawJSON []byte, routeModel string) (codexOp
 	if !json.Valid(rawJSON) {
 		return codexOpenAIImagePreparedRequest{}, fmt.Errorf("invalid OpenAI image edit request JSON")
 	}
-	prompt := strings.TrimSpace(gjson.GetBytes(rawJSON, "prompt").String())
 	images := make([]string, 0)
 	if imagesResult := gjson.GetBytes(rawJSON, "images"); imagesResult.IsArray() {
 		for _, img := range imagesResult.Array() {
@@ -769,6 +840,11 @@ func codexPrepareOpenAIImageEditJSON(rawJSON []byte, routeModel string) (codexOp
 			}
 		}
 	}
+	return codexPrepareOpenAIImageEditImages(rawJSON, routeModel, images, "image_edit")
+}
+
+func codexPrepareOpenAIImageEditImages(rawJSON []byte, routeModel string, images []string, streamPrefix string) (codexOpenAIImagePreparedRequest, error) {
+	prompt := strings.TrimSpace(gjson.GetBytes(rawJSON, "prompt").String())
 	tool := codexBuildOpenAIImageTool(rawJSON, routeModel, "edit", []string{"size", "quality", "background", "output_format", "input_fidelity", "moderation"}, []string{"output_compression", "partial_images"})
 	if mask := strings.TrimSpace(gjson.GetBytes(rawJSON, "mask.image_url").String()); mask != "" {
 		tool, _ = sjson.SetBytes(tool, "input_image_mask.image_url", mask)
@@ -777,7 +853,7 @@ func codexPrepareOpenAIImageEditJSON(rawJSON []byte, routeModel string) (codexOp
 	return codexOpenAIImagePreparedRequest{
 		Body:           body,
 		ResponseFormat: codexOpenAIImageResponseFormatFromJSON(rawJSON),
-		StreamPrefix:   "image_edit",
+		StreamPrefix:   streamPrefix,
 	}, nil
 }
 

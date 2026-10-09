@@ -316,6 +316,153 @@ func TestCodexExecutorDirectOpenAIImageEditUsesImagesEditEndpointForMultipart(t 
 	}
 }
 
+func TestCodexExecutorDirectOpenAIImageGenerationWithReferenceImagesUsesEditEndpoint(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{
+			name:    "single string",
+			payload: []byte(`{"model":"gpt-image-2.5","prompt":"Put this cat in the snow","image":"data:image/png;base64,AAAA","size":"1024x1024","input_fidelity":"high"}`),
+		},
+		{
+			name:    "edits-style images field",
+			payload: []byte(`{"model":"gpt-image-2.5","prompt":"Put this cat in the snow","images":[{"image_url":"data:image/png;base64,AAAA"}]}`),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			var gotBody []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				var errRead error
+				gotBody, errRead = io.ReadAll(r.Body)
+				if errRead != nil {
+					t.Fatalf("read body: %v", errRead)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"created":1713833628,"data":[{"b64_json":"AA=="}],"usage":{"total_tokens":10}}`))
+			}))
+			defer server.Close()
+
+			executor := NewCodexExecutor(&config.Config{})
+			_, errExecute := executor.Execute(context.Background(), newCodexOpenAIImageTestAuth(server.URL), cliproxyexecutor.Request{
+				Model:   "gpt-image-2.5",
+				Payload: tc.payload,
+			}, codexOpenAIImageTestOptions(codexImagesGenerationsPath, false))
+			if errExecute != nil {
+				t.Fatalf("Execute() error = %v", errExecute)
+			}
+
+			if gotPath != "/images/edits" {
+				t.Fatalf("path = %q, want /images/edits", gotPath)
+			}
+			if !json.Valid(gotBody) {
+				t.Fatalf("body is not valid JSON: %s", string(gotBody))
+			}
+			if got := gjson.GetBytes(gotBody, "model").String(); got != "gpt-image-2.5" {
+				t.Fatalf("model = %q, want gpt-image-2.5; body=%s", got, string(gotBody))
+			}
+			if got := gjson.GetBytes(gotBody, "images.#").Int(); got != 1 {
+				t.Fatalf("images count = %d, want 1; body=%s", got, string(gotBody))
+			}
+			if got := gjson.GetBytes(gotBody, "images.0.image_url").String(); got != "data:image/png;base64,AAAA" {
+				t.Fatalf("images.0.image_url = %q; body=%s", got, string(gotBody))
+			}
+			if gjson.GetBytes(gotBody, "image").Exists() {
+				t.Fatalf("image field should be folded into images: %s", string(gotBody))
+			}
+			if gjson.GetBytes(gotBody, "stream").Exists() {
+				t.Fatalf("stream should be removed for non-stream execution: %s", string(gotBody))
+			}
+		})
+	}
+}
+
+func TestCodexExecutorDirectOpenAIImageGenerationWithReferenceImageArrayKeepsOrder(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var errRead error
+		gotBody, errRead = io.ReadAll(r.Body)
+		if errRead != nil {
+			t.Fatalf("read body: %v", errRead)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"created":1713833628,"data":[{"b64_json":"AA=="}],"usage":{"total_tokens":10}}`))
+	}))
+	defer server.Close()
+
+	executor := NewCodexExecutor(&config.Config{})
+	_, errExecute := executor.Execute(context.Background(), newCodexOpenAIImageTestAuth(server.URL), cliproxyexecutor.Request{
+		Model:   "gpt-image-2",
+		Payload: []byte(`{"model":"gpt-image-2","prompt":"Blend the cats","image":["data:image/png;base64,AAAA",{"image_url":"data:image/jpeg;base64,BBBB"}]}`),
+	}, codexOpenAIImageTestOptions(codexImagesGenerationsPath, false))
+	if errExecute != nil {
+		t.Fatalf("Execute() error = %v", errExecute)
+	}
+
+	if gotPath != "/images/edits" {
+		t.Fatalf("path = %q, want /images/edits", gotPath)
+	}
+	if got := gjson.GetBytes(gotBody, "images.#").Int(); got != 2 {
+		t.Fatalf("images count = %d, want 2; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "images.0.image_url").String(); got != "data:image/png;base64,AAAA" {
+		t.Fatalf("images.0.image_url = %q; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "images.1.image_url").String(); got != "data:image/jpeg;base64,BBBB" {
+		t.Fatalf("images.1.image_url = %q; body=%s", got, string(gotBody))
+	}
+}
+
+func TestCodexExecutorOpenAIImageGenerationWithReferenceImagesUsesEditTool(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var errRead error
+		gotBody, errRead = io.ReadAll(r.Body)
+		if errRead != nil {
+			t.Fatalf("read body: %v", errRead)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"created_at\":1713833628,\"output\":[{\"type\":\"image_generation_call\",\"result\":\"AA==\",\"output_format\":\"png\"}],\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n"))
+	}))
+	defer server.Close()
+
+	executor := NewCodexExecutor(&config.Config{})
+	resp, errExecute := executor.Execute(context.Background(), newCodexOpenAIImageTestAuth(server.URL), cliproxyexecutor.Request{
+		Model:   "gpt-image-1",
+		Payload: []byte(`{"model":"gpt-image-1","prompt":"Put this cat in the snow","image":"data:image/png;base64,AAAA","input_fidelity":"high"}`),
+	}, codexOpenAIImageTestOptions(codexImagesGenerationsPath, false))
+	if errExecute != nil {
+		t.Fatalf("Execute() error = %v", errExecute)
+	}
+
+	if gotPath != "/responses" {
+		t.Fatalf("path = %q, want /responses", gotPath)
+	}
+	if got := gjson.GetBytes(gotBody, "tools.0.action").String(); got != "edit" {
+		t.Fatalf("tools.0.action = %q, want edit; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "tools.0.model").String(); got != "gpt-image-1" {
+		t.Fatalf("tools.0.model = %q, want gpt-image-1; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "tools.0.input_fidelity").String(); got != "high" {
+		t.Fatalf("tools.0.input_fidelity = %q, want high; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(gotBody, "input.0.content.1.image_url").String(); got != "data:image/png;base64,AAAA" {
+		t.Fatalf("input.0.content.1.image_url = %q; body=%s", got, string(gotBody))
+	}
+	if got := gjson.GetBytes(resp.Payload, "data.0.b64_json").String(); got != "AA==" {
+		t.Fatalf("data.0.b64_json = %q, want AA==; payload=%s", got, string(resp.Payload))
+	}
+}
+
 func TestCodexExecutorDirectOpenAIImage25Models(t *testing.T) {
 	testModels := []string{
 		"gpt-image-2.5",
