@@ -2467,6 +2467,8 @@
     "stat_keys_hint": "共 {{total}} 个",
     "stat_models_available_hint": "共 {{total}} 个模型",
     "status_failed": "失败",
+    "status_interrupted": "请求中断",
+    "status_interrupted_hint": "调用方中断了请求。",
     "status_label": "状态",
     "status_success": "成功",
     "stream": "流式",

@@ -7,6 +7,7 @@ import { I18nextProvider } from 'react-i18next';
 import english from '../src/i18n/locales/en.json';
 import { AccountLoginForm } from '../src/features/sharing/AccountLoginForm';
 import { AccountPage } from '../src/features/sharing/AccountPage';
+import { RequestStatus } from '../src/features/sharing/UsagePage';
 import { obfuscatedStorage } from '../src/services/storage/secureStorage';
 import { readFileSync } from 'node:fs';
 import { apiClient } from '../src/services/api/client';
@@ -175,6 +176,50 @@ describe('official frontend account integration', () => {
     expect(styles).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     const entry = readFileSync('src/App.tsx', 'utf8');
     expect(entry).toContain('<MainLayout />');
+  });
+
+  test('shows 499 as caller interruption in both lists and details in every locale', () => {
+    for (const locale of ['zh-CN', 'zh-TW', 'en', 'ru']) {
+      const dictionary = JSON.parse(readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
+      const translations = createInstance();
+      void translations.init({
+        lng: locale,
+        initAsync: false,
+        resources: { [locale]: { translation: dictionary } },
+      });
+      for (const showLabel of [false, true]) {
+        for (const failed of [false, true]) {
+          const markup = renderToStaticMarkup(
+            createElement(
+              I18nextProvider,
+              { i18n: translations },
+              createElement(RequestStatus, { status: 499, failed, showLabel })
+            )
+          );
+          expect(markup).toContain(dictionary.sharing.status_interrupted);
+          expect(markup).toContain(dictionary.sharing.status_interrupted_hint);
+          expect(markup).toContain('499');
+          expect(markup).not.toContain(dictionary.sharing.status_failed);
+          expect(markup).not.toContain(dictionary.sharing.status_success);
+        }
+      }
+    }
+  });
+
+  test('preserves success and service failure labels for non-interrupted requests', () => {
+    const success = render(createElement(RequestStatus, { status: 200, showLabel: true }));
+    expect(success).toContain('Success');
+    expect(success).not.toContain('Request interrupted');
+    for (const status of [502, 504]) {
+      const failure = render(createElement(RequestStatus, { status, showLabel: true }));
+      expect(failure).toContain('Failed');
+      expect(failure).toContain(String(status));
+      expect(failure).not.toContain('Request interrupted');
+    }
+    const failedOK = render(
+      createElement(RequestStatus, { status: 200, failed: true, showLabel: true })
+    );
+    expect(failedOK).toContain('Failed');
   });
 
   test('includes every sharing label in the existing four locale catalogs', () => {

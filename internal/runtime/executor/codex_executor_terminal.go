@@ -22,7 +22,7 @@ type codexIncompleteStreamError struct {
 
 func newCodexIncompleteStreamError() codexIncompleteStreamError {
 	return codexIncompleteStreamError{statusErr: statusErr{
-		code: http.StatusRequestTimeout,
+		code: http.StatusBadGateway,
 		msg:  codexIncompleteStreamMessage,
 	}}
 }

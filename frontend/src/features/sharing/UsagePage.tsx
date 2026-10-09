@@ -86,9 +86,47 @@ function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   );
 }
 
+export function RequestStatus({
+  status,
+  failed = false,
+  showLabel = false,
+}: {
+  status: number;
+  failed?: boolean;
+  showLabel?: boolean;
+}) {
+  const { t } = useTranslation();
+  const interrupted = status === 499;
+  const unsuccessful = failed || status >= 400;
+  const label = interrupted
+    ? 'sharing.status_interrupted'
+    : unsuccessful
+      ? 'sharing.status_failed'
+      : 'sharing.status_success';
+  return (
+    <div>
+      <span
+        className={
+          interrupted ? styles.pillInterrupted : unsuccessful ? styles.pillFail : styles.pillOk
+        }
+      >
+        {interrupted || showLabel ? t(label) : status}
+      </span>
+      {(interrupted || showLabel) && (
+        <>
+          {' '}
+          <span className={styles.cellSecondary}>{status}</span>
+        </>
+      )}
+      {interrupted && (
+        <div className={styles.cellSecondary}>{t('sharing.status_interrupted_hint')}</div>
+      )}
+    </div>
+  );
+}
+
 function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClose: () => void }) {
   const { t } = useTranslation();
-  const failed = entry ? entry.failed || entry.status >= 400 : false;
   const tokenParts = entry
     ? [
         entry.reasoning_tokens > 0
@@ -118,10 +156,7 @@ function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClos
       {entry && (
         <dl className={styles.fieldGrid}>
           <Field label={t('sharing.status_label')}>
-            <span className={failed ? styles.pillFail : styles.pillOk}>
-              {t(failed ? 'sharing.status_failed' : 'sharing.status_success')}
-            </span>{' '}
-            <span className={styles.cellSecondary}>{entry.status}</span>
+            <RequestStatus status={entry.status} failed={entry.failed} showLabel />
           </Field>
           <Field label={t('sharing.field_latency')}>{duration(entry.latency_ms)}</Field>
           {entry.ttft_ms > 0 && (
@@ -350,10 +385,6 @@ export function UsagePage() {
           : '',
     },
   ];
-
-  const statusPill = (status: number, failed?: boolean) => (
-    <span className={failed || status >= 400 ? styles.pillFail : styles.pillOk}>{status}</span>
-  );
 
   const tabHint =
     tab === 'detail'
@@ -599,9 +630,13 @@ export function UsagePage() {
                         <span className={styles.cellSecondary}>{t('sharing.unknown')}</span>
                       )}
                     </TableCell>
-                    <TableCell>{statusPill(entry.status, entry.failed)}</TableCell>
                     <TableCell>
-                      <div className={`${styles.latency} ${failed ? styles.latencyFail : ''}`}>
+                      <RequestStatus status={entry.status} failed={entry.failed} />
+                    </TableCell>
+                    <TableCell>
+                      <div
+                        className={`${styles.latency} ${entry.status === 499 ? styles.latencyInterrupted : failed ? styles.latencyFail : ''}`}
+                      >
                         <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
                         {rate !== null && (
                           <div className={styles.cellSecondary}>{rate} t/s</div>
@@ -661,10 +696,12 @@ export function UsagePage() {
                   <TableCell>
                     <span className={styles.mono}>{entry.model}</span>
                   </TableCell>
-                  <TableCell>{statusPill(entry.status)}</TableCell>
+                  <TableCell>
+                    <RequestStatus status={entry.status} />
+                  </TableCell>
                   <TableCell>
                     <div
-                      className={`${styles.latency} ${entry.status >= 400 ? styles.latencyFail : ''}`}
+                      className={`${styles.latency} ${entry.status === 499 ? styles.latencyInterrupted : entry.status >= 400 ? styles.latencyFail : ''}`}
                     >
                       <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
                     </div>

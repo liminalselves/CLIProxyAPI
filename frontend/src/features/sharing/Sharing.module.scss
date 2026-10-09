@@ -816,7 +816,8 @@
 }
 
 .pillOk,
-.pillFail {
+.pillFail,
+.pillInterrupted {
   display: inline-block;
   padding: 1px $spacing-sm;
   border-radius: $radius-sm;
@@ -832,6 +833,11 @@
 .pillFail {
   color: var(--danger-color);
   border: 1px solid var(--danger-color);
+}
+
+.pillInterrupted {
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .segmented {
@@ -878,6 +884,10 @@
 
 .latencyFail {
   border-left-color: var(--danger-color);
+}
+
+.latencyInterrupted {
+  border-left-color: var(--border-color);
 }
 
 .pageSize {

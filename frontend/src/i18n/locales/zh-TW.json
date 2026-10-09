@@ -2493,6 +2493,8 @@
     "stat_keys_hint": "共 {{total}} 個",
     "stat_models_available_hint": "共 {{total}} 個模型",
     "status_failed": "失敗",
+    "status_interrupted": "請求中斷",
+    "status_interrupted_hint": "呼叫方中斷了請求。",
     "status_label": "狀態",
     "status_success": "成功",
     "stream": "串流",

@@ -2469,6 +2469,8 @@
     "stat_keys_hint": "{{total}} in total",
     "stat_models_available_hint": "{{total}} models in total",
     "status_failed": "Failed",
+    "status_interrupted": "Request interrupted",
+    "status_interrupted_hint": "The caller interrupted the request.",
     "status_label": "Status",
     "status_success": "Success",
     "stream": "Streaming",

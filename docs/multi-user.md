@@ -163,6 +163,12 @@ The console has two related records:
   input/output/cache/reasoning tokens, elapsed time, and trace/request IDs. Retries
   remain separate, so usage is attributed to the credential actually attempted.
 
+Status 499 is displayed as **Request interrupted**: the caller interrupted the
+request, not an upstream service failure. Codex HTTP response streams that close
+before a successful terminal event are classified as 502, not a timeout. Once
+streaming has begun, the HTTP status cannot change; Messages reports the failure
+through an SSE `error` event with `api_error` rather than marking partial output complete.
+
 Attribution is captured before execution, not resolved later from a mutable key
 or credential record. Revoking a key or deleting a credential does not remove its
 history. Usage plugins run asynchronously; a completed call may appear shortly

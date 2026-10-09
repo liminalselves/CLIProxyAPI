@@ -2463,6 +2463,8 @@
     "stat_keys_hint": "Всего: {{total}}",
     "stat_models_available_hint": "Моделей всего: {{total}}",
     "status_failed": "Сбой",
+    "status_interrupted": "Запрос прерван",
+    "status_interrupted_hint": "Клиент прервал запрос.",
     "status_label": "Статус",
     "status_success": "Успех",
     "stream": "Streaming",

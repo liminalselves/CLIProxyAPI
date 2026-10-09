@@ -25,6 +25,7 @@ func TestClaudeErrorTypeFromStatus(t *testing.T) {
 		{http.StatusRequestTimeout, "timeout_error"},
 		{http.StatusTooManyRequests, "rate_limit_error"},
 		{http.StatusInternalServerError, "api_error"},
+		{http.StatusBadGateway, "api_error"},
 		{http.StatusGatewayTimeout, "timeout_error"},
 	} {
 		t.Run(http.StatusText(tt.status), func(t *testing.T) {
@@ -49,10 +50,10 @@ func TestClaudeIncompleteStreamError(t *testing.T) {
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
 			handler := NewClaudeCodeAPIHandler(&handlers.BaseAPIHandler{})
 			msg := &interfaces.ErrorMessage{
-				StatusCode: http.StatusRequestTimeout,
+				StatusCode: http.StatusBadGateway,
 				Error:      errors.New(message),
 			}
-			wantStatus := http.StatusRequestTimeout
+			wantStatus := http.StatusBadGateway
 			if streaming {
 				c.Header("Content-Type", "text/event-stream")
 				_, _ = c.Writer.Write([]byte("event: message_start\ndata: {}\n\n"))
@@ -78,14 +79,17 @@ func TestClaudeIncompleteStreamError(t *testing.T) {
 				if strings.Count(body, prefix) != 1 {
 					t.Fatalf("expected one terminal error event; body=%s", body)
 				}
+				if strings.Contains(body, "event: message_stop") {
+					t.Fatalf("incomplete stream was marked successful; body=%s", body)
+				}
 				_, body, _ = strings.Cut(body, prefix)
 				body = strings.TrimSpace(body)
 			}
 			if got := gjson.Get(body, "type").String(); got != "error" {
 				t.Errorf("type = %q, want error", got)
 			}
-			if got := gjson.Get(body, "error.type").String(); got != "timeout_error" {
-				t.Errorf("error.type = %q, want timeout_error", got)
+			if got := gjson.Get(body, "error.type").String(); got != "api_error" {
+				t.Errorf("error.type = %q, want api_error", got)
 			}
 			if got := gjson.Get(body, "error.message").String(); got != message {
 				t.Errorf("error.message = %q, want %q", got, message)

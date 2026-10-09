@@ -1434,7 +1434,7 @@ func TestManager_Execute_DisableCooling_RetriesAfter429RetryAfter(t *testing.T) 
 
 func TestManager_RequestScopedErrorStopsCredentialFallbackWithoutSuspendingAuth(t *testing.T) {
 	incompleteErr := &requestScopedStatusError{
-		status:  http.StatusRequestTimeout,
+		status:  http.StatusBadGateway,
 		message: "stream error: stream disconnected before completion: stream closed before response.completed",
 	}
 	messageTooBigErr := &requestScopedStatusError{
@@ -1488,8 +1488,9 @@ func TestManager_RequestScopedErrorStopsCredentialFallbackWithoutSuspendingAuth(
 		err                error
 		wantStatus         int
 	}{
-		{name: "non-streaming incomplete", err: incompleteErr, wantStatus: http.StatusRequestTimeout},
-		{name: "streaming incomplete", stream: true, err: incompleteErr, wantStatus: http.StatusRequestTimeout},
+		{name: "non-streaming incomplete", err: incompleteErr, wantStatus: http.StatusBadGateway},
+		{name: "streaming incomplete", stream: true, err: incompleteErr, wantStatus: http.StatusBadGateway},
+		{name: "streaming incomplete after payload", stream: true, streamAfterPayload: true, err: incompleteErr, wantStatus: http.StatusBadGateway},
 		{name: "streaming codex websocket message too big", provider: "codex", stream: true, err: messageTooBigErr, wantStatus: http.StatusRequestEntityTooLarge},
 		{name: "streaming xai websocket message too big", provider: "xai", stream: true, err: messageTooBigErr, wantStatus: http.StatusRequestEntityTooLarge},
 		{name: "non-streaming invalid request", err: invalidRequestErr, wantStatus: http.StatusBadRequest},
