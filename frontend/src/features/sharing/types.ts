@@ -141,18 +141,6 @@ export interface Summary {
   unknown_token_records: number;
 }
 
-export interface CallEntry {
-  id: string;
-  at: string;
-  consumer: string;
-  key_id: string;
-  key_name: string;
-  endpoint: string;
-  model: string;
-  status: number;
-  latency_ms: number;
-}
-
 export interface AuditEntry {
   id: string;
   at: string;

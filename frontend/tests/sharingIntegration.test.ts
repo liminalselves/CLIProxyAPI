@@ -7,7 +7,7 @@ import { I18nextProvider } from 'react-i18next';
 import english from '../src/i18n/locales/en.json';
 import { AccountLoginForm } from '../src/features/sharing/AccountLoginForm';
 import { AccountPage } from '../src/features/sharing/AccountPage';
-import { RequestStatus } from '../src/features/sharing/UsagePage';
+import { RequestStatus, UsageLogRow } from '../src/features/sharing/UsagePage';
 import { obfuscatedStorage } from '../src/services/storage/secureStorage';
 import { readFileSync } from 'node:fs';
 import { apiClient } from '../src/services/api/client';
@@ -187,39 +187,125 @@ describe('official frontend account integration', () => {
         initAsync: false,
         resources: { [locale]: { translation: dictionary } },
       });
-      for (const showLabel of [false, true]) {
-        for (const failed of [false, true]) {
-          const markup = renderToStaticMarkup(
-            createElement(
-              I18nextProvider,
-              { i18n: translations },
-              createElement(RequestStatus, { status: 499, failed, showLabel })
-            )
-          );
-          expect(markup).toContain(dictionary.sharing.status_interrupted);
-          expect(markup).toContain(dictionary.sharing.status_interrupted_hint);
-          expect(markup).toContain('499');
-          expect(markup).not.toContain(dictionary.sharing.status_failed);
-          expect(markup).not.toContain(dictionary.sharing.status_success);
-        }
+      expect(dictionary.sharing.status_interrupted_hint.trim()).not.toBe('');
+      for (const failed of [false, true]) {
+        const markup = renderToStaticMarkup(
+          createElement(
+            I18nextProvider,
+            { i18n: translations },
+            createElement(RequestStatus, { status: 499, failed })
+          )
+        );
+        expect(markup).toContain(dictionary.sharing.status_interrupted);
+        expect(markup).toContain('499');
+        expect(markup).not.toContain(dictionary.sharing.status_failed);
+        expect(markup).not.toContain(dictionary.sharing.status_success);
       }
     }
   });
 
   test('preserves success and service failure labels for non-interrupted requests', () => {
-    const success = render(createElement(RequestStatus, { status: 200, showLabel: true }));
+    const success = render(createElement(RequestStatus, { status: 200 }));
     expect(success).toContain('Success');
     expect(success).not.toContain('Request interrupted');
     for (const status of [502, 504]) {
-      const failure = render(createElement(RequestStatus, { status, showLabel: true }));
+      const failure = render(createElement(RequestStatus, { status }));
       expect(failure).toContain('Failed');
       expect(failure).toContain(String(status));
       expect(failure).not.toContain('Request interrupted');
     }
-    const failedOK = render(
-      createElement(RequestStatus, { status: 200, failed: true, showLabel: true })
-    );
+    const failedOK = render(createElement(RequestStatus, { status: 200, failed: true }));
     expect(failedOK).toContain('Failed');
+  });
+
+  test('usage log row shows only the essential fields in a compact table row', () => {
+    const entry = {
+      id: 'u1',
+      request_id: 'req-1',
+      trace_id: 'trace-1',
+      at: '2026-10-10T00:05:27Z',
+      consumer: 'alice',
+      key_id: 'k1',
+      key_name: 'phone',
+      owner: 'bob',
+      channel_id: 'ch1',
+      channel: 'bob-kimi',
+      credential_id: 'c1',
+      credential_name: 'bob-kimi-codex#1-internal.json',
+      provider: 'codex',
+      model: 'kimi-k3',
+      upstream_model: 'kimi-k3-for-coding',
+      endpoint: 'POST /v1/chat/completions',
+      stream: true,
+      failed: false,
+      status: 200,
+      latency_ms: 49000,
+      ttft_ms: 1200,
+      input_tokens: 4364,
+      output_tokens: 2000,
+      reasoning_tokens: 0,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
+      total_tokens: 6364,
+      tokens_known: true,
+    };
+    const wrap = (element: ReturnType<typeof createElement>) =>
+      render(createElement('table', null, createElement('tbody', null, element)));
+
+    const markup = wrap(
+      createElement(UsageLogRow, { entry, showConsumer: false, onOpen: () => {} })
+    );
+    expect(markup).toContain('kimi-k3');
+    // Bare base-model calls append the serving channel-pinned model in parentheses.
+    expect(markup).toContain('（bob-kimi/kimi-k3）');
+    expect(markup).toContain('phone');
+    expect(markup).toContain('bob-kimi');
+    expect(markup).toContain('49.0s');
+    expect(markup).toContain('41 t/s');
+    expect(markup).toContain('4,364 / 2,000');
+    expect(markup).toContain('Total 6,364');
+    expect(markup).toContain('Stream');
+    expect(markup).toContain('Time to first token 1.2s');
+    expect(markup).not.toContain('@alice');
+    expect(markup).not.toContain('trace-1');
+    expect(markup).not.toContain('kimi-k3-for-coding');
+    expect(markup).not.toContain('internal.json');
+
+    const pinned = wrap(
+      createElement(UsageLogRow, {
+        entry: { ...entry, model: 'bob-kimi/kimi-k3' },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    expect(pinned).toContain('bob-kimi/kimi-k3');
+    expect(pinned).not.toContain('（');
+
+    const scoped = wrap(
+      createElement(UsageLogRow, { entry, showConsumer: true, onOpen: () => {} })
+    );
+    expect(scoped).toContain('@alice');
+
+    const failure = wrap(
+      createElement(UsageLogRow, {
+        entry: { ...entry, status: 502, failed: true },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    expect(failure).toContain('Failed');
+    expect(failure).toContain('502');
+
+    const interrupted = wrap(
+      createElement(UsageLogRow, {
+        entry: { ...entry, status: 499, failed: true },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    expect(interrupted).toContain('Request interrupted');
+    expect(interrupted).toContain('499');
+    expect(interrupted).not.toContain('Failed');
   });
 
   test('includes every sharing label in the existing four locale catalogs', () => {

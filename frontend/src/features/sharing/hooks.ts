@@ -12,9 +12,15 @@ export const date = (value: string) => {
   if (Number.isNaN(time.getTime())) return '—';
   return `${time.getFullYear()}-${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}:${pad2(time.getSeconds())}`;
 };
+export const compactDate = (value: string) => {
+  if (!value) return '—';
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return '—';
+  return `${pad2(time.getMonth() + 1)}-${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}:${pad2(time.getSeconds())}`;
+};
 export const number = (value: number | undefined) => Number(value || 0).toLocaleString();
 export const duration = (ms: number) =>
-  ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${number(ms)} ms`;
+  ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${number(ms)}ms`;
 
 export function useSharingData<T>(loader: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null);

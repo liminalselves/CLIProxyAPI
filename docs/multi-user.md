@@ -6,8 +6,11 @@ persistent usage records and an operation journal. Its existing login shell,
 sidebar, themes, credential cards, details drawer, OAuth pages and shared UI
 components are reused. `/hub.html` redirects to the same frontend.
 Members manage their own credentials; administrators manage all credentials and
-issue invitations. Every signed-in member can inspect everyone's usage and audit
-records, but cannot retrieve other members' keys or upstream tokens.
+issue invitations. The usage page shows the signed-in member's own call records
+by default, with a scope switch for calls made through their credentials (and
+site-wide records for administrators). Site-wide totals live on the dashboard.
+Audit records stay visible to every signed-in member, but members cannot
+retrieve other members' keys or upstream tokens.
 
 ## Enable
 

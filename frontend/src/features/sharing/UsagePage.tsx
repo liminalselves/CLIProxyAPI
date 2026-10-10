@@ -5,8 +5,12 @@ import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DatePickerInput } from '@/components/ui/DatePickerInput';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Select } from '@/components/ui/Select';
 import { Sheet } from '@/components/ui/Sheet';
+import { useAuthStore } from '@/stores';
+import { sharingApi } from '@/services/api/sharing';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   Table,
   TableHeader,
@@ -15,15 +19,12 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/Table';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { useAuthStore } from '@/stores';
-import { sharingApi } from '@/services/api/sharing';
-import type { Channel, UsageEntry } from './types';
+import type { Channel, PersonalKey, UsageEntry } from './types';
 import { DailyTrend, LoadState, PageHeader, Pager } from './shared';
-import { useSharingData, date, duration, number } from './hooks';
+import { date, duration, number, useSharingData } from './hooks';
 import styles from './Sharing.module.scss';
 
-type UsageTab = 'detail' | 'calls' | 'groups';
+type UsageScope = 'mine' | 'contributed' | 'site';
 type RangePreset = 'all' | 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 
 const DAY_MS = 86400000;
@@ -75,15 +76,40 @@ const stripJsonExt = (name: string) => name.replace(/\.json$/i, '');
 // the pinned prefix alone identifies the credential, the rest is internal.
 const credentialDisplayName = (name: string) =>
   stripJsonExt(name).replace(/^(.+#\d+)-[^#]+$/, '$1');
-// Hub-mounted AI providers record the internal route ID
-// ("<type>-hub-ch-<channelID>-<name>") as provider; only the type is
-// meaningful to readers.
-const providerBadgeLabel = (provider: string) => provider.split('-hub-ch-', 1)[0] || provider;
-const shortTrace = (id: string) => (id.length > 8 ? id.slice(0, 8) + '…' : id);
 const tokensPerSecond = (entry: UsageEntry) =>
   entry.tokens_known && entry.latency_ms > 0 && entry.output_tokens > 0
     ? Math.round(entry.output_tokens / (entry.latency_ms / 1000))
     : null;
+
+const statusKind = (status: number, failed: boolean): 'ok' | 'fail' | 'interrupted' =>
+  status === 499 ? 'interrupted' : failed || status >= 400 ? 'fail' : 'ok';
+
+const entryStatus = (entry: UsageEntry): 'ok' | 'fail' | 'interrupted' =>
+  statusKind(entry.status, entry.failed);
+
+export function RequestStatus({ status, failed = false }: { status: number; failed?: boolean }) {
+  const { t } = useTranslation();
+  const kind = statusKind(status, failed);
+  const label =
+    kind === 'interrupted'
+      ? t('sharing.status_interrupted')
+      : kind === 'fail'
+        ? t('sharing.status_failed')
+        : t('sharing.status_success');
+  return (
+    <span
+      className={
+        kind === 'interrupted'
+          ? styles.pillInterrupted
+          : kind === 'fail'
+            ? styles.pillFail
+            : styles.pillOk
+      }
+    >
+      {label} {status}
+    </span>
+  );
+}
 
 function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
@@ -94,46 +120,15 @@ function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   );
 }
 
-export function RequestStatus({
-  status,
-  failed = false,
-  showLabel = false,
+function UsageDetailSheet({
+  entry,
+  showConsumer,
+  onClose,
 }: {
-  status: number;
-  failed?: boolean;
-  showLabel?: boolean;
+  entry: UsageEntry | null;
+  showConsumer: boolean;
+  onClose: () => void;
 }) {
-  const { t } = useTranslation();
-  const interrupted = status === 499;
-  const unsuccessful = failed || status >= 400;
-  const label = interrupted
-    ? 'sharing.status_interrupted'
-    : unsuccessful
-      ? 'sharing.status_failed'
-      : 'sharing.status_success';
-  return (
-    <div>
-      <span
-        className={
-          interrupted ? styles.pillInterrupted : unsuccessful ? styles.pillFail : styles.pillOk
-        }
-      >
-        {interrupted || showLabel ? t(label) : status}
-      </span>
-      {(interrupted || showLabel) && (
-        <>
-          {' '}
-          <span className={styles.cellSecondary}>{status}</span>
-        </>
-      )}
-      {interrupted && (
-        <div className={styles.cellSecondary}>{t('sharing.status_interrupted_hint')}</div>
-      )}
-    </div>
-  );
-}
-
-function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClose: () => void }) {
   const { t } = useTranslation();
   const tokenParts = entry
     ? [
@@ -164,21 +159,33 @@ function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClos
       {entry && (
         <dl className={styles.fieldGrid}>
           <Field label={t('sharing.status_label')}>
-            <RequestStatus status={entry.status} failed={entry.failed} showLabel />
+            <div>
+              <RequestStatus status={entry.status} failed={entry.failed} />
+              {entry.status === 499 && (
+                <div className={styles.cellSecondary}>{t('sharing.status_interrupted_hint')}</div>
+              )}
+            </div>
           </Field>
           <Field label={t('sharing.field_latency')}>{duration(entry.latency_ms)}</Field>
           {entry.ttft_ms > 0 && (
             <Field label={t('sharing.field_ttft')}>{duration(entry.ttft_ms)}</Field>
           )}
-          <Field label={t('sharing.consumer')}>{entry.consumer}</Field>
+          {showConsumer && <Field label={t('sharing.consumer')}>{entry.consumer}</Field>}
           <Field label={t('sharing.field_key')}>{entry.key_name || '—'}</Field>
           <Field label={t('sharing.channel')}>{entry.channel}</Field>
+          {entry.owner && entry.owner !== entry.consumer && (
+            <Field label={t('sharing.owner_label')}>{entry.owner}</Field>
+          )}
           <Field label={t('sharing.field_credential')}>
             {entry.credential_name ? credentialDisplayName(entry.credential_name) : '—'}
           </Field>
-          <Field label={t('sharing.owner')}>{entry.owner}</Field>
           <Field label={t('sharing.field_model')}>
-            <span className={styles.mono}>{entry.model}</span>
+            <span className={styles.mono}>
+              {entry.model}
+              {servingModelId(entry) && (
+                <span className={styles.cellSecondary}>（{servingModelId(entry)}）</span>
+              )}
+            </span>
           </Field>
           {entry.upstream_model && entry.upstream_model !== entry.model && (
             <Field label={t('sharing.field_upstream_model')}>
@@ -217,25 +224,174 @@ function UsageDetailSheet({ entry, onClose }: { entry: UsageEntry | null; onClos
   );
 }
 
+function RequestStatusPill({ kind }: { kind: 'fail' | 'interrupted' }) {
+  const { t } = useTranslation();
+  return (
+    <span className={kind === 'interrupted' ? styles.pillInterrupted : styles.pillFail}>
+      {kind === 'interrupted' ? t('sharing.status_interrupted') : t('sharing.status_failed')}
+    </span>
+  );
+}
+
+// Bare base-model calls (keys with even load balancing) are served by one
+// channel's pinned model ID; surface it next to the requested name.
+export const servingModelId = (entry: Pick<UsageEntry, 'model' | 'channel'>): string =>
+  entry.model && !entry.model.includes('/') && entry.channel
+    ? `${entry.channel}/${entry.model}`
+    : '';
+
+export function UsageLogRow({
+  entry,
+  showConsumer,
+  onOpen,
+}: {
+  entry: UsageEntry;
+  showConsumer: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  const status = entryStatus(entry);
+  const rate = tokensPerSecond(entry);
+  const latencyClass =
+    status === 'fail'
+      ? styles.latencyFail
+      : status === 'interrupted'
+        ? styles.latencyInterrupted
+        : '';
+  return (
+    <TableRow className={styles.clickableRow} onClick={onOpen}>
+      <TableCell>
+        <div className={`${styles.cellPrimary} ${styles.mono}`}>{date(entry.at)}</div>
+        {status !== 'ok' && (
+          <div className={styles.logStatusLine}>
+            <RequestStatusPill kind={status} />{' '}
+            <span className={styles.cellSecondary}>{entry.status}</span>
+          </div>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className={styles.cellPrimary}>{entry.key_name || '—'}</div>
+        {showConsumer ? (
+          <div className={styles.cellSecondary}>@{entry.consumer}</div>
+        ) : (
+          <div className={styles.cellSecondary}>{entry.channel}</div>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className={`${styles.cellPrimary} ${styles.mono}`}>
+          {entry.model}
+          {servingModelId(entry) && (
+            <span className={styles.cellSecondary}>（{servingModelId(entry)}）</span>
+          )}
+        </div>
+        {showConsumer && <div className={styles.cellSecondary}>{entry.channel}</div>}
+      </TableCell>
+      <TableCell>
+        <div className={styles.cellPrimary}>
+          {t(entry.stream ? 'sharing.stream' : 'sharing.nonstream')}
+        </div>
+        {rate !== null && <div className={styles.cellSecondary}>{rate} t/s</div>}
+      </TableCell>
+      <TableCell>
+        {entry.tokens_known ? (
+          <>
+            <div className={`${styles.cellPrimary} ${styles.mono}`}>
+              {number(entry.input_tokens)} / {number(entry.output_tokens)}
+            </div>
+            <div className={styles.cellSecondary}>
+              {t('sharing.token_total')} {number(entry.total_tokens)}
+            </div>
+          </>
+        ) : (
+          <span className={styles.cellSecondary}>{t('sharing.unknown')}</span>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className={`${styles.latency} ${latencyClass}`}>
+          <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
+          {entry.ttft_ms > 0 && (
+            <div className={styles.cellSecondary}>
+              {t('sharing.field_ttft')} {duration(entry.ttft_ms)}
+            </div>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function UsageLogCard({
+  entry,
+  showConsumer,
+  onOpen,
+}: {
+  entry: UsageEntry;
+  showConsumer: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  const status = entryStatus(entry);
+  const rate = tokensPerSecond(entry);
+  return (
+    <button type="button" className={styles.keyCard} onClick={onOpen}>
+      <span className={styles.keyCardHead}>
+        <span className={`${styles.cellPrimary} ${styles.mono}`}>
+          {entry.model}
+          {servingModelId(entry) && (
+            <span className={styles.cellSecondary}>（{servingModelId(entry)}）</span>
+          )}
+        </span>
+        <span className={styles.cellPrimary}>
+          {entry.tokens_known ? number(entry.total_tokens) : '—'}
+        </span>
+      </span>
+      <span className={styles.cellSecondary}>{date(entry.at)}</span>
+      <span className={styles.cellSecondary}>
+        {entry.key_name || '—'}
+        {showConsumer ? ` · @${entry.consumer}` : ''} · {entry.channel}
+      </span>
+      <span className={styles.cellSecondary}>
+        {duration(entry.latency_ms)}
+        {rate !== null ? ` · ${rate} t/s` : ''}
+        {entry.tokens_known
+          ? ` · ${t('sharing.hint_tokens_io', {
+              input: number(entry.input_tokens),
+              output: number(entry.output_tokens),
+            })}`
+          : ''}
+        {` · ${t(entry.stream ? 'sharing.stream' : 'sharing.nonstream')}`}
+      </span>
+      {status !== 'ok' && (
+        <span className={styles.logStatusLine}>
+          <RequestStatusPill kind={status} />{' '}
+          <span className={styles.cellSecondary}>{entry.status}</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function UsagePage() {
   const { t } = useTranslation();
   const account = useAuthStore((state) => state.account);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const me = account?.username || '';
+  const isAdmin = account?.role === 'admin';
   const [params, setParams] = useSearchParams();
 
-  const tab: UsageTab =
-    params.get('tab') === 'calls' || params.get('tab') === 'groups'
-      ? (params.get('tab') as UsageTab)
-      : 'detail';
+  const scope: UsageScope =
+    params.get('scope') === 'contributed'
+      ? 'contributed'
+      : params.get('scope') === 'site' && isAdmin
+        ? 'site'
+        : 'mine';
   const page = Number(params.get('page') || 1);
   const pageSize = Number(params.get('page_size') || 50);
-  const keyID = params.get('key_id') || '';
+  const appliedKeyID = params.get('key_id') || '';
   const queryString = params.toString();
-  const appliedConsumer = params.get('consumer') || '';
-  const appliedOwner = params.get('owner') || '';
 
-  const [consumer, setConsumer] = useState(appliedConsumer);
-  const [owner, setOwner] = useState(appliedOwner);
   const [model, setModel] = useState(params.get('model') || '');
+  const [keyID, setKeyID] = useState(appliedKeyID);
   const [channelID, setChannelID] = useState(params.get('channel_id') || '');
   const [preset, setPreset] = useState<RangePreset>(() =>
     detectPreset(params.get('from') || '', params.get('to') || '')
@@ -243,21 +399,19 @@ export function UsagePage() {
   const [customFrom, setCustomFrom] = useState(() => toDayInput(params.get('from'), 0));
   const [customTo, setCustomTo] = useState(() => toDayInput(params.get('to'), -1));
 
-  const [options, setOptions] = useState<{ usernames: string[]; channels: Channel[] } | null>(null);
+  const [options, setOptions] = useState<{ channels: Channel[]; keys: PersonalKey[] } | null>(
+    null
+  );
   const [selected, setSelected] = useState<UsageEntry | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [users, channels] = await Promise.all([sharingApi.users(), sharingApi.channels()]);
-        if (!cancelled)
-          setOptions({
-            usernames: users.users.map((user) => user.username),
-            channels: channels.channels,
-          });
+        const [channels, keys] = await Promise.all([sharingApi.channels(), sharingApi.keys()]);
+        if (!cancelled) setOptions({ channels: channels.channels, keys: keys.keys });
       } catch {
-        // Filter suggestions are best-effort; free-text filtering keeps working.
+        // Filter options are best-effort; free-text filtering keeps working.
       }
     })();
     return () => {
@@ -265,39 +419,40 @@ export function UsagePage() {
     };
   }, []);
 
-  // The summary feed drives the stat cards, the daily trend and the groups tab;
-  // only the active tab's paged dataset is fetched alongside it.
+  // The summary feed drives the stat pills, the daily trend and model
+  // suggestions; the paged entry list loads alongside it.
   const { data, loading, error } = useSharingData(
     useCallback(async () => {
       const values: Record<string, string | number> = {
         ...Object.fromEntries(new URLSearchParams(queryString)),
         page_size: pageSize,
       };
-      delete values.tab;
-      const [summary, usage, calls] = await Promise.all([
+      delete values.scope;
+      if (scope === 'mine') values.consumer = me;
+      if (scope === 'contributed') values.owner = me;
+      const [summary, usage] = await Promise.all([
         sharingApi.summary(values),
-        tab === 'detail' ? sharingApi.usage(values) : Promise.resolve(null),
-        tab === 'calls' ? sharingApi.calls(values) : Promise.resolve(null),
+        sharingApi.usage(values),
       ]);
-      return { summary, usage, calls };
-    }, [queryString, tab, pageSize])
+      return { summary, usage };
+    }, [queryString, scope, me, pageSize])
   );
 
   const groups = useMemo(() => data?.summary.groups ?? [], [data]);
-  const distinct = (values: Array<string | undefined>) =>
-    [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-  const consumers = distinct([...(options?.usernames ?? []), ...groups.map((g) => g.consumer)]);
-  const owners = distinct([...(options?.usernames ?? []), ...groups.map((g) => g.owner)]);
-  const models = distinct(groups.map((g) => g.model));
+  const models = useMemo(
+    () =>
+      [
+        ...new Set(groups.map((group) => group.model).filter((value): value is string => Boolean(value))),
+      ].sort((a, b) => a.localeCompare(b)),
+    [groups]
+  );
 
   const apply = () => {
     const next = new URLSearchParams();
-    if (consumer.trim()) next.set('consumer', consumer.trim());
-    if (owner.trim()) next.set('owner', owner.trim());
+    if (scope !== 'mine') next.set('scope', scope);
     if (model.trim()) next.set('model', model.trim());
     if (channelID) next.set('channel_id', channelID);
+    if (keyID && scope === 'mine') next.set('key_id', keyID);
     if (preset === 'custom') {
       if (customFrom) next.set('from', startOfDay(parseDayInput(customFrom)).toISOString());
       if (customTo)
@@ -310,50 +465,28 @@ export function UsagePage() {
       next.set('from', range.from.toISOString());
       next.set('to', range.to.toISOString());
     }
-    if (keyID) next.set('key_id', keyID);
-    if (tab !== 'detail') next.set('tab', tab);
     setParams(next);
   };
 
   const reset = () => {
-    setConsumer('');
-    setOwner('');
     setModel('');
     setChannelID('');
+    setKeyID('');
     setPreset('all');
     setCustomFrom('');
     setCustomTo('');
     const next = new URLSearchParams();
-    if (tab !== 'detail') next.set('tab', tab);
+    if (scope !== 'mine') next.set('scope', scope);
     setParams(next);
   };
 
-  const me = account?.username || '';
-  const scope =
-    me && appliedConsumer === me && appliedOwner !== me
-      ? 'mine'
-      : me && appliedOwner === me && appliedConsumer !== me
-        ? 'contributed'
-        : !appliedConsumer && !appliedOwner
-          ? 'all'
-          : 'custom';
-  const setScope = (value: 'all' | 'mine' | 'contributed') => {
+  const setScope = (value: UsageScope) => {
     const next = new URLSearchParams(params);
-    next.delete('consumer');
-    next.delete('owner');
     next.delete('page');
-    if (value === 'mine') next.set('consumer', me);
-    if (value === 'contributed') next.set('owner', me);
-    setConsumer(next.get('consumer') || '');
-    setOwner(next.get('owner') || '');
-    setParams(next);
-  };
-
-  const setTab = (value: UsageTab) => {
-    const next = new URLSearchParams(params);
-    if (value === 'detail') next.delete('tab');
-    else next.set('tab', value);
-    next.delete('page');
+    next.delete('key_id');
+    setKeyID('');
+    if (value === 'mine') next.delete('scope');
+    else next.set('scope', value);
     setParams(next);
   };
 
@@ -367,101 +500,61 @@ export function UsagePage() {
 
   const total = data?.summary.total;
   const failureRate =
-    total && total.executions > 0 ? ((total.failures / total.executions) * 100).toFixed(1) : null;
-  const stats = [
-    {
-      label: t('sharing.calls'),
-      value: total ? number(total.calls) : '—',
-      hint: t('sharing.hint_requests'),
-    },
-    {
-      label: t('sharing.executions'),
-      value: total ? number(total.executions) : '—',
-      hint: t('sharing.hint_executions'),
-    },
-    {
-      label: t('sharing.failures'),
-      value: total ? number(total.failures) : '—',
-      hint: failureRate !== null ? t('sharing.hint_failures', { rate: failureRate }) : '',
-    },
-    {
-      label: t('sharing.total_tokens'),
-      value: total ? number(total.total_tokens) : '—',
-      hint:
-        total && total.unknown_token_records > 0
+    total && total.executions > 0 ? (total.failures / total.executions) * 100 : null;
+  const tokenHint = total
+    ? [
+        t('sharing.hint_tokens_io', {
+          input: number(total.input_tokens),
+          output: number(total.output_tokens),
+        }),
+        total.unknown_token_records > 0
           ? t('sharing.hint_tokens_unknown', { count: number(total.unknown_token_records) })
           : '',
-    },
-  ];
+      ]
+        .filter(Boolean)
+        .join('；')
+    : undefined;
 
-  const tabHint =
-    tab === 'detail'
-      ? t('sharing.hint_detail')
-      : tab === 'calls'
-        ? t('sharing.hint_calls')
-        : t('sharing.hint_groups');
+  const keyOptions = useMemo(() => {
+    const keys = options?.keys ?? [];
+    const list = [
+      { value: '', label: t('sharing.all_keys') },
+      ...keys.map((key) => ({ value: key.id, label: key.name || key.hint })),
+    ];
+    if (keyID && !keys.some((key) => key.id === keyID))
+      list.push({ value: keyID, label: t('sharing.unknown_key') });
+    return list;
+  }, [options, keyID, t]);
+
+  const showConsumer = scope !== 'mine';
 
   return (
     <div className={styles.page}>
       <PageHeader
         title={t('sharing.usage')}
-        hint={t('sharing.usage_hint')}
         actions={
-          me ? (
-            <div className={styles.segmented}>
-              {(['all', 'mine', 'contributed'] as const).map((value) => (
+          <div className={styles.segmented}>
+            {(['mine', 'contributed', 'site'] as const)
+              .filter((value) => value !== 'site' || isAdmin)
+              .map((value) => (
                 <button
                   key={value}
                   type="button"
                   className={`${styles.segmentedItem} ${scope === value ? styles.active : ''}`}
                   onClick={() => setScope(value)}
                 >
-                  {value === 'all'
-                    ? t('sharing.scope_all')
-                    : value === 'mine'
-                      ? t('sharing.my_usage')
-                      : t('sharing.my_contribution')}
+                  {value === 'mine'
+                    ? t('sharing.my_usage')
+                    : value === 'contributed'
+                      ? t('sharing.my_contribution')
+                      : t('sharing.scope_all')}
                 </button>
               ))}
-            </div>
-          ) : undefined
+          </div>
         }
       />
       <Card>
         <div className={styles.filters}>
-          <AutocompleteInput
-            label={t('sharing.consumer')}
-            value={consumer}
-            onChange={setConsumer}
-            options={consumers}
-          />
-          <AutocompleteInput
-            label={t('sharing.owner')}
-            value={owner}
-            onChange={setOwner}
-            options={owners}
-          />
-          <div className="form-group">
-            <label>{t('sharing.channel')}</label>
-            <Select
-              value={channelID}
-              onChange={setChannelID}
-              ariaLabel={t('sharing.channel')}
-              options={[
-                { value: '', label: t('sharing.all_channels') },
-                ...(options?.channels ?? []).map((channel) => ({
-                  value: channel.id,
-                  label: `${channel.slug}（${channel.owner}）`,
-                })),
-              ]}
-            />
-          </div>
-          <AutocompleteInput
-            label={t('sharing.model')}
-            value={model}
-            onChange={setModel}
-            options={models}
-          />
           <div className="form-group">
             <label>{t('sharing.range_label')}</label>
             <Select
@@ -484,6 +577,38 @@ export function UsagePage() {
               <DatePickerInput label={t('sharing.to')} value={customTo} onChange={setCustomTo} />
             </>
           )}
+          <AutocompleteInput
+            label={t('sharing.model')}
+            value={model}
+            onChange={setModel}
+            options={models}
+          />
+          <div className="form-group">
+            <label>{t('sharing.channel')}</label>
+            <Select
+              value={channelID}
+              onChange={setChannelID}
+              ariaLabel={t('sharing.channel')}
+              options={[
+                { value: '', label: t('sharing.all_channels') },
+                ...(options?.channels ?? []).map((channel) => ({
+                  value: channel.id,
+                  label: `${channel.slug}（${channel.owner}）`,
+                })),
+              ]}
+            />
+          </div>
+          {scope === 'mine' && (
+            <div className="form-group">
+              <label>{t('sharing.key_label')}</label>
+              <Select
+                value={keyID}
+                onChange={setKeyID}
+                ariaLabel={t('sharing.key_label')}
+                options={keyOptions}
+              />
+            </div>
+          )}
           <div className={styles.actions}>
             <Button onClick={apply}>{t('sharing.apply_filter')}</Button>
             <Button variant="secondary" onClick={reset}>
@@ -491,64 +616,63 @@ export function UsagePage() {
             </Button>
           </div>
         </div>
-        {keyID && (
-          <p className={styles.meta}>
-            <span className={styles.badge}>
-              {t('sharing.key_chip', { id: shortTrace(keyID) })}
-            </span>{' '}
-            <button
-              type="button"
-              className={styles.boardDelete}
-              onClick={() => {
-                const next = new URLSearchParams(params);
-                next.delete('key_id');
-                next.delete('page');
-                setParams(next);
-              }}
-            >
-              {t('sharing.clear_filter')}
-            </button>
-          </p>
-        )}
+        <div className={styles.statPills}>
+          <span className={styles.statPill} title={t('sharing.hint_executions')}>
+            <span className={styles.statPillLabel}>{t('sharing.pill_calls')}</span>
+            <span className={styles.statPillValue}>{total ? number(total.executions) : '—'}</span>
+          </span>
+          <span className={styles.statPill} title={tokenHint}>
+            <span className={styles.statPillLabel}>{t('sharing.pill_tokens')}</span>
+            <span className={styles.statPillValue}>
+              {total ? number(total.total_tokens) : '—'}
+            </span>
+          </span>
+          <span
+            className={`${styles.statPill} ${
+              failureRate !== null && failureRate > 0
+                ? styles.statPillDanger
+                : styles.statPillSuccess
+            }`}
+            title={
+              total
+                ? t('sharing.hint_failures_detail', {
+                    failures: number(total.failures),
+                    executions: number(total.executions),
+                  })
+                : undefined
+            }
+          >
+            <span className={styles.statPillLabel}>{t('sharing.pill_failure_rate')}</span>
+            <span className={styles.statPillValue}>
+              {failureRate !== null ? `${failureRate.toFixed(1)}%` : '—'}
+            </span>
+          </span>
+        </div>
       </Card>
-      <div className={styles.statCards}>
-        {stats.map((stat) => (
-          <div key={stat.label} className={styles.statCard}>
-            <span className={styles.statLabel}>{stat.label}</span>
-            <strong className={styles.statValue}>{stat.value}</strong>
-            {stat.hint && <span className={styles.statHint}>{stat.hint}</span>}
-          </div>
-        ))}
-      </div>
       <Card title={t('sharing.trend_title')}>
         {loading && !data ? null : <DailyTrend groups={groups} />}
       </Card>
-      <div className={styles.actions}>
-        <div className={styles.segmented}>
-          {(['detail', 'calls', 'groups'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={`${styles.segmentedItem} ${tab === value ? styles.active : ''}`}
-              onClick={() => setTab(value)}
-            >
-              {value === 'detail'
-                ? t('sharing.tab_executions')
-                : value === 'calls'
-                  ? t('sharing.tab_calls')
-                  : t('sharing.tab_summary')}
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="hint">{tabHint}</p>
       <LoadState loading={loading} error={error} />
-      {tab === 'detail' && (
-        <>
+      {!loading && !data?.usage?.items.length && (
+        <EmptyState title={t('sharing.no_records')} description={t('sharing.no_records_hint')} />
+      )}
+      {Boolean(data?.usage?.items.length) &&
+        (isMobile ? (
+          <div className={styles.keyCards}>
+            {data?.usage?.items.map((entry) => (
+              <UsageLogCard
+                key={entry.id}
+                entry={entry}
+                showConsumer={showConsumer}
+                onOpen={() => setSelected(entry)}
+              />
+            ))}
+          </div>
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                {['time', 'consumer', 'source', 'model', 'tokens_io', 'status_label', 'col_latency'].map(
+                {['time', 'key_label', 'model', 'col_mode', 'col_tokens', 'col_latency'].map(
                   (key) => (
                     <TableHead key={key}>{t('sharing.' + key)}</TableHead>
                   )
@@ -556,227 +680,33 @@ export function UsagePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.usage?.items.map((entry) => {
-                const failed = entry.failed || entry.status >= 400;
-                const rate = tokensPerSecond(entry);
-                return (
-                  <TableRow
-                    key={entry.id}
-                    className={styles.clickableRow}
-                    onClick={() => setSelected(entry)}
-                  >
-                    <TableCell>
-                      <div className={`${styles.cellPrimary} ${styles.mono}`}>{date(entry.at)}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className={styles.cellPrimary}>{entry.consumer}</div>
-                      {entry.key_name && (
-                        <div className={styles.cellSecondary}>
-                          {t('sharing.line_key', { name: entry.key_name })}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className={styles.cellPrimary}>{entry.channel}</div>
-                      <div className={styles.cellSecondary}>
-                        {t('sharing.line_owner', { name: entry.owner })}
-                      </div>
-                      {entry.credential_name && (
-                        <div className={styles.cellSecondary}>
-                          {t('sharing.line_credential', {
-                            name: credentialDisplayName(entry.credential_name),
-                          })}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className={styles.cellPrimary}>
-                        {entry.provider && (
-                          <span className={styles.badge}>{providerBadgeLabel(entry.provider)}</span>
-                        )}{' '}
-                        <span className={styles.mono}>{entry.model}</span>
-                      </div>
-                      <div className={styles.cellSecondary}>
-                        {entry.endpoint} ·{' '}
-                        {t(entry.stream ? 'sharing.stream' : 'sharing.nonstream')}
-                      </div>
-                      {entry.trace_id && (
-                        <div
-                          className={`${styles.cellSecondary} ${styles.mono}`}
-                          title={entry.trace_id}
-                        >
-                          {t('sharing.line_trace', { id: shortTrace(entry.trace_id) })}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {entry.tokens_known ? (
-                        <>
-                          <div className={styles.cellPrimary}>
-                            {number(entry.input_tokens)} / {number(entry.output_tokens)} /{' '}
-                            {number(entry.total_tokens)}
-                          </div>
-                          {(() => {
-                            const parts = [
-                              entry.cache_read_tokens > 0
-                                ? t('sharing.token_cache', {
-                                    count: number(entry.cache_read_tokens),
-                                  })
-                                : '',
-                              entry.reasoning_tokens > 0
-                                ? t('sharing.token_reasoning', {
-                                    count: number(entry.reasoning_tokens),
-                                  })
-                                : '',
-                            ].filter(Boolean);
-                            return parts.length > 0 ? (
-                              <div className={styles.cellSecondary}>{parts.join(' · ')}</div>
-                            ) : null;
-                          })()}
-                        </>
-                      ) : (
-                        <span className={styles.cellSecondary}>{t('sharing.unknown')}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <RequestStatus status={entry.status} failed={entry.failed} />
-                    </TableCell>
-                    <TableCell>
-                      <div
-                        className={`${styles.latency} ${entry.status === 499 ? styles.latencyInterrupted : failed ? styles.latencyFail : ''}`}
-                      >
-                        <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
-                        {rate !== null && (
-                          <div className={styles.cellSecondary}>{rate} t/s</div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          {!loading && !data?.usage?.items.length && (
-            <EmptyState title={t('sharing.no_records')} />
-          )}
-          <Pager
-            page={page}
-            total={data?.usage?.total || 0}
-            pageSize={pageSize}
-            onPageSize={setPageSize}
-            onPage={(value) => {
-              const next = new URLSearchParams(params);
-              next.set('page', String(value));
-              setParams(next);
-            }}
-          />
-        </>
-      )}
-      {tab === 'calls' && (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {['time', 'consumer', 'endpoint', 'model', 'status_label', 'col_latency'].map(
-                  (key) => (
-                    <TableHead key={key}>{t('sharing.' + key)}</TableHead>
-                  )
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.calls?.items.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>
-                    <div className={`${styles.cellPrimary} ${styles.mono}`}>{date(entry.at)}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className={styles.cellPrimary}>{entry.consumer}</div>
-                    {entry.key_name && (
-                      <div className={styles.cellSecondary}>
-                        {t('sharing.line_key', { name: entry.key_name })}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{entry.endpoint}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{entry.model}</span>
-                  </TableCell>
-                  <TableCell>
-                    <RequestStatus status={entry.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div
-                      className={`${styles.latency} ${entry.status === 499 ? styles.latencyInterrupted : entry.status >= 400 ? styles.latencyFail : ''}`}
-                    >
-                      <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {data?.usage?.items.map((entry) => (
+                <UsageLogRow
+                  key={entry.id}
+                  entry={entry}
+                  showConsumer={showConsumer}
+                  onOpen={() => setSelected(entry)}
+                />
               ))}
             </TableBody>
           </Table>
-          {!loading && !data?.calls?.items.length && <EmptyState title={t('sharing.no_records')} />}
-          <Pager
-            page={page}
-            total={data?.calls?.total || 0}
-            pageSize={pageSize}
-            onPageSize={setPageSize}
-            onPage={(value) => {
-              const next = new URLSearchParams(params);
-              next.set('page', String(value));
-              setParams(next);
-            }}
-          />
-        </>
-      )}
-      {tab === 'groups' && (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {[
-                  'col_day',
-                  'consumer',
-                  'source',
-                  'model',
-                  'calls',
-                  'executions',
-                  'failures',
-                  'total_tokens',
-                ].map((key) => (
-                  <TableHead key={key}>{t('sharing.' + key)}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groups.map((entry, index) => (
-                <TableRow key={index}>
-                  <TableCell>{entry.day}</TableCell>
-                  <TableCell>{entry.consumer}</TableCell>
-                  <TableCell>
-                    <div className={styles.cellPrimary}>{entry.channel}</div>
-                    <div className={styles.cellSecondary}>
-                      {t('sharing.line_owner', { name: entry.owner })}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className={styles.mono}>{entry.model}</span>
-                  </TableCell>
-                  <TableCell>{number(entry.calls)}</TableCell>
-                  <TableCell>{number(entry.executions)}</TableCell>
-                  <TableCell>{number(entry.failures)}</TableCell>
-                  <TableCell>{number(entry.total_tokens)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {!loading && !groups.length && <EmptyState title={t('sharing.no_records')} />}
-        </>
-      )}
-      <UsageDetailSheet entry={selected} onClose={() => setSelected(null)} />
+        ))}
+      <Pager
+        page={page}
+        total={data?.usage?.total || 0}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
+        onPage={(value) => {
+          const next = new URLSearchParams(params);
+          next.set('page', String(value));
+          setParams(next);
+        }}
+      />
+      <UsageDetailSheet
+        entry={selected}
+        showConsumer={showConsumer}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

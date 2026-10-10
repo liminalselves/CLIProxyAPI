@@ -178,7 +178,7 @@ export function SharingDashboard() {
                 <strong>{data ? number(data.mine.total.total_tokens) : '—'}</strong>
               </div>
             </div>
-            <Link to={'/usage?consumer=' + username} className="btn btn-secondary">
+            <Link to="/usage" className="btn btn-secondary">
               {t('sharing.view_usage')}
             </Link>
           </div>
@@ -196,7 +196,7 @@ export function SharingDashboard() {
               </div>
             </div>
             <p className="hint">{t('sharing.contribution_hint')}</p>
-            <Link to={'/usage?owner=' + username} className="btn btn-secondary">
+            <Link to="/usage?scope=contributed" className="btn btn-secondary">
               {t('sharing.view_usage')}
             </Link>
           </div>

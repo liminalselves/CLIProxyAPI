@@ -3,7 +3,6 @@ import type {
   Account,
   AuditEntry,
   BoardMessage,
-  CallEntry,
   Channel,
   HistoryPage,
   Invitation,
@@ -106,8 +105,6 @@ export const sharingApi = {
     apiClient.post(sharingPath('/me/password'), { current_password, password }),
   usage: (params: Record<string, string | number>, signal?: AbortSignal) =>
     apiClient.get<HistoryPage<UsageEntry>>(sharingPath('/usage'), { params, signal }),
-  calls: (params: Record<string, string | number>, signal?: AbortSignal) =>
-    apiClient.get<HistoryPage<CallEntry>>(sharingPath('/calls'), { params, signal }),
   summary: (params: Record<string, string | number>, signal?: AbortSignal) =>
     apiClient.get<{ total: Summary; groups: Summary[] }>(sharingPath('/usage/summary'), {
       params,
