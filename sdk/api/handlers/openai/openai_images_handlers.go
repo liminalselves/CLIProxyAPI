@@ -237,7 +237,7 @@ func isSupportedImagesModel(model string) bool {
 	if isCodexImagesToolModel(model) {
 		return true
 	}
-	return isXAIImagesModel(model) || isOpenAICompatImagesModel(model)
+	return isXAIImagesModel(model) || isOpenAICompatImagesModel(model) || isGeminiImagesModel(model)
 }
 
 func isCodexImagesToolModel(model string) bool {
@@ -265,7 +265,7 @@ func rejectUnsupportedImagesModel(c *gin.Context, model string) bool {
 
 	c.JSON(http.StatusBadRequest, handlers.ErrorResponse{
 		Error: handlers.ErrorDetail{
-			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, %s, %s, %s, %s, %s, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, gptImage15Model, defaultImagesToolModel, gptImage25FlareModel, gptImage25SunburstModel, gptImage25Model, defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model),
+			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, %s, %s, %s, %s, %s, a Gemini image model, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, gptImage15Model, defaultImagesToolModel, gptImage25FlareModel, gptImage25SunburstModel, gptImage25Model, defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model),
 			Type:    "invalid_request_error",
 		},
 	})
@@ -497,7 +497,7 @@ func multipartFileToDataURL(fileHeader *multipart.FileHeader) (string, error) {
 	}
 
 	mediaType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
-	if mediaType == "" {
+	if mediaType == "" || strings.EqualFold(mediaType, "application/octet-stream") {
 		mediaType = http.DetectContentType(data)
 	}
 
@@ -667,6 +667,10 @@ func (h *OpenAIAPIHandler) ImagesGenerations(c *gin.Context) {
 	}
 	stream := gjson.GetBytes(rawJSON, "stream").Bool()
 
+	if isGeminiImagesModel(imageModel) {
+		h.handleGeminiImages(c, rawJSON, imageModel, responseFormat, "image_generation", stream, collectGeminiImagesFromJSON(rawJSON))
+		return
+	}
 	if isCodexImagesToolModel(imageModel) {
 		imageReq := buildOpenAICompatImagesJSONRequest(rawJSON, imageModel, stream)
 		h.handleRoutedImages(c, imageReq, imageModel, stream)
@@ -812,6 +816,19 @@ func (h *OpenAIAPIHandler) imagesEditsFromMultipart(c *gin.Context) {
 	}
 	stream := parseBoolField(c.PostForm("stream"), false)
 
+	if isGeminiImagesModel(imageModel) {
+		rawJSON := []byte(`{}`)
+		for key, values := range form.Value {
+			if len(values) > 0 {
+				rawJSON, _ = sjson.SetBytes(rawJSON, key, values[0])
+			}
+		}
+		if len(form.File["mask"]) > 0 {
+			rawJSON, _ = sjson.SetBytes(rawJSON, "mask", "uploaded")
+		}
+		h.handleGeminiImages(c, rawJSON, imageModel, responseFormat, "image_edit", stream, images)
+		return
+	}
 	if isCodexImagesToolModel(imageModel) {
 		imageReq, contentType, errBuild := buildOpenAICompatImagesMultipartRequest(form, imageModel, stream)
 		if errBuild != nil {
@@ -955,6 +972,10 @@ func (h *OpenAIAPIHandler) imagesEditsFromJSON(c *gin.Context) {
 	}
 	stream := gjson.GetBytes(rawJSON, "stream").Bool()
 
+	if isGeminiImagesModel(imageModel) {
+		h.handleGeminiImages(c, rawJSON, imageModel, responseFormat, "image_edit", stream, collectGeminiImagesFromJSON(rawJSON))
+		return
+	}
 	if isCodexImagesToolModel(imageModel) {
 		imageReq := buildOpenAICompatImagesJSONRequest(rawJSON, imageModel, stream)
 		h.handleRoutedImages(c, imageReq, imageModel, stream)
@@ -1464,13 +1485,17 @@ func (h *OpenAIAPIHandler) collectXAIImages(c *gin.Context, xaiReq []byte, respo
 }
 
 func (h *OpenAIAPIHandler) collectImagesWithModel(c *gin.Context, imageReq []byte, model string, responseFormat string) {
+	h.collectImagesWithProtocol(c, imageReq, model, responseFormat, xaiImagesHandlerType)
+}
+
+func (h *OpenAIAPIHandler) collectImagesWithProtocol(c *gin.Context, imageReq []byte, model string, responseFormat string, protocol string) {
 	c.Header("Content-Type", "application/json")
 
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
 	stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
 
 	model = strings.TrimSpace(model)
-	resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
+	resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, protocol, model, imageReq, "")
 	stopKeepAlive()
 	if errMsg != nil {
 		h.WriteErrorResponse(c, errMsg)
@@ -1482,6 +1507,15 @@ func (h *OpenAIAPIHandler) collectImagesWithModel(c *gin.Context, imageReq []byt
 		return
 	}
 
+	if protocol == "gemini" {
+		var errNormalize error
+		resp, errNormalize = normalizeGeminiImagesResponse(resp)
+		if errNormalize != nil {
+			h.WriteErrorResponse(c, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: errNormalize})
+			cliCancel(errNormalize)
+			return
+		}
+	}
 	out, err := buildImagesAPIResponseFromXAI(resp, responseFormat)
 	if err != nil {
 		errMsg := &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err}
@@ -1501,6 +1535,10 @@ func (h *OpenAIAPIHandler) streamXAIImages(c *gin.Context, xaiReq []byte, respon
 }
 
 func (h *OpenAIAPIHandler) streamImagesWithModel(c *gin.Context, imageReq []byte, model string, responseFormat string, streamPrefix string) {
+	h.streamImagesWithProtocol(c, imageReq, model, responseFormat, streamPrefix, xaiImagesHandlerType)
+}
+
+func (h *OpenAIAPIHandler) streamImagesWithProtocol(c *gin.Context, imageReq []byte, model string, responseFormat string, streamPrefix string, protocol string) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, handlers.ErrorResponse{
@@ -1521,7 +1559,7 @@ func (h *OpenAIAPIHandler) streamImagesWithModel(c *gin.Context, imageReq []byte
 	}
 	resultChan := make(chan imageStreamResult, 1)
 	go func() {
-		resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
+		resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, protocol, model, imageReq, "")
 		resultChan <- imageStreamResult{resp: resp, upstreamHeaders: upstreamHeaders, errMsg: errMsg}
 	}()
 
@@ -1565,6 +1603,14 @@ func (h *OpenAIAPIHandler) streamImagesWithModel(c *gin.Context, imageReq []byte
 				return
 			}
 
+			if protocol == "gemini" {
+				var errNormalize error
+				result.resp, errNormalize = normalizeGeminiImagesResponse(result.resp)
+				if errNormalize != nil {
+					writeError(&interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: errNormalize})
+					return
+				}
+			}
 			results, _, usageRaw, err := extractXAIImagesResponse(result.resp)
 			if err != nil {
 				writeError(&interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err})

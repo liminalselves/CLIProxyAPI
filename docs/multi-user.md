@@ -138,8 +138,8 @@ console). Such keys may call a bare base model name directly, for example
 across every published credential serving that model across all channels, and a
 failed attempt fails over to the next credential until all have been tried.
 Chat, Messages, Gemini and Responses requests plus the image endpoints
-(`/v1/images/generations`, `/v1/images/edits`) follow this routing. Bare names
-are not listed in `/v1/models`; the marketplace shows the base model names to
+(`/v1/images/generations`, `/v1/images/edits`; see [Image API](image-api.md))
+follow this routing. Bare names are not listed in `/v1/models`; the marketplace shows the base model names to
 use. For keys without the flag, bare model IDs and automatic cross-channel
 selection are not supported, and the console enforces this independently of
 `routing.force-model-prefix`. In multi-user mode the legacy `access.api-keys`
