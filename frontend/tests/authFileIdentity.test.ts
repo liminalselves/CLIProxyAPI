@@ -183,4 +183,74 @@ describe('deriveAuthFileIdentity', () => {
       fullName: '',
     });
   });
+
+  test('leads with the pinned channel prefix and keeps the name remainder as the secondary row', () => {
+    expect(
+      deriveAuthFileIdentity(
+        authFile({
+          name: '123-kimi#1-kimi-1791347589910.json',
+          type: 'kimi',
+          channel: '123-kimi#1',
+        })
+      )
+    ).toEqual({
+      primary: '123-kimi#1',
+      kind: 'pinned',
+      secondary: 'kimi-1791347589910.json',
+      fullName: '123-kimi#1-kimi-1791347589910.json',
+    });
+  });
+
+  test('prefers the pinned prefix over the account email', () => {
+    const identity = deriveAuthFileIdentity(
+      authFile({
+        name: '123-codex#1-codex-abc12345-user@example.com-team.json',
+        email: 'user@example.com',
+        channel: '123-codex#1',
+      })
+    );
+    expect(identity.kind).toBe('pinned');
+    expect(identity.primary).toBe('123-codex#1');
+    // The email stays visible inside the filename remainder.
+    expect(identity.secondary).toBe('codex-abc12345-user@example.com-team.json');
+  });
+
+  test('falls back to the full file name for claimed credentials never renamed with the prefix', () => {
+    expect(
+      deriveAuthFileIdentity(
+        authFile({ name: 'kimi-1791347589910.json', type: 'kimi', channel: '123-kimi#1' })
+      )
+    ).toEqual({
+      primary: '123-kimi#1',
+      kind: 'pinned',
+      secondary: 'kimi-1791347589910.json',
+      fullName: 'kimi-1791347589910.json',
+    });
+  });
+
+  test('drops a secondary row that would duplicate the pinned title', () => {
+    const identity = deriveAuthFileIdentity(
+      authFile({ name: '123-kimi#1', type: 'kimi', channel: '123-kimi#1' })
+    );
+    expect(identity).toEqual({
+      primary: '123-kimi#1',
+      kind: 'pinned',
+      secondary: null,
+      fullName: '123-kimi#1',
+    });
+  });
+
+  test('ignores the pinned branch when the channel field is absent, blank, or not a string', () => {
+    expect(deriveAuthFileIdentity(authFile({ name: 'kimi-1712345678901.json' })).kind).toBe(
+      'fileName'
+    );
+    expect(
+      deriveAuthFileIdentity(authFile({ name: 'kimi-1712345678901.json', channel: '  ' })).kind
+    ).toBe('fileName');
+    expect(
+      deriveAuthFileIdentity(
+        authFile({ name: 'kimi-1712345678901.json', channel: 42 as unknown as string })
+      ).kind
+    ).toBe('fileName');
+  });
 });

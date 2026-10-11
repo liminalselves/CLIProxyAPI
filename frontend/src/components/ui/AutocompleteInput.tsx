@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { IconChevronDown } from './icons';
+import { IconChevronDown, IconX } from './icons';
+import { matchesAutocompleteQuery } from './autocompleteMatching';
 
 interface AutocompleteInputProps {
   label?: string;
@@ -17,6 +18,10 @@ interface AutocompleteInputProps {
   onChange: (value: string) => void;
   options: string[] | { value: string; label?: string }[];
   placeholder?: string;
+  /** When set, the dropdown also opens with zero matching options and shows this hint row. */
+  emptyHint?: string;
+  /** Accessible label for the clear button shown while a focused input has text. */
+  clearLabel?: string;
   disabled?: boolean;
   hint?: string;
   error?: string;
@@ -33,6 +38,8 @@ export function AutocompleteInput({
   onChange,
   options,
   placeholder,
+  emptyHint,
+  clearLabel = 'Clear',
   disabled,
   hint,
   error,
@@ -43,6 +50,7 @@ export function AutocompleteInput({
   rightElement,
 }: AutocompleteInputProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -55,13 +63,10 @@ export function AutocompleteInput({
       : { value: opt.value, label: opt.label || opt.value }
   );
 
-  const filteredOptions = normalizedOptions.filter((opt) => {
-    const v = value.toLowerCase();
-    return (
-      opt.value.toLowerCase().includes(v) || (opt.label && opt.label.toLowerCase().includes(v))
-    );
-  });
-  const showDropdown = isOpen && filteredOptions.length > 0 && !disabled;
+  const filteredOptions = normalizedOptions.filter(
+    (opt) => matchesAutocompleteQuery(opt.value, value) || matchesAutocompleteQuery(opt.label, value)
+  );
+  const showDropdown = isOpen && (filteredOptions.length > 0 || Boolean(emptyHint)) && !disabled;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -147,7 +152,11 @@ export function AutocompleteInput({
           className={`input ${className}`.trim()}
           value={value}
           onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            setIsOpen(true);
+            setIsFocused(true);
+          }}
+          onBlur={() => setIsFocused(false)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
@@ -169,7 +178,34 @@ export function AutocompleteInput({
           onClick={() => !disabled && setIsOpen(!isOpen)}
         >
           {rightElement}
-          <IconChevronDown size={16} style={{ opacity: 0.5, marginLeft: 4 }} />
+          {isFocused && value ? (
+            <button
+              type="button"
+              aria-label={clearLabel}
+              title={clearLabel}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: 0,
+                border: 'none',
+                background: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                marginLeft: 4,
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+                setHighlightedIndex(-1);
+                setIsOpen(true);
+              }}
+            >
+              <IconX size={14} style={{ opacity: 0.5 }} />
+            </button>
+          ) : (
+            <IconChevronDown size={16} style={{ opacity: 0.5, marginLeft: 4 }} />
+          )}
         </div>
 
         {showDropdown &&
@@ -188,6 +224,17 @@ export function AutocompleteInput({
                 ...dropdownStyle,
               }}
             >
+              {filteredOptions.length === 0 && emptyHint && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {emptyHint}
+                </div>
+              )}
               {filteredOptions.map((opt, index) => (
                 <div
                   key={`${opt.value}-${index}`}

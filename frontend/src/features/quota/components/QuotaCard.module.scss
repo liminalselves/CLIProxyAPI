@@ -85,6 +85,24 @@
   @include text-ellipsis;
 }
 
+/* 钉住前缀凭证的双行标题：主行钉住前缀，副行灰色小字文件名剩余部分 */
+.fileTitle {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fileSubName {
+  min-width: 0;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: var(--text-tertiary);
+  @include text-ellipsis;
+}
+
 /* ---------- body 容器 ---------- */
 
 .body {

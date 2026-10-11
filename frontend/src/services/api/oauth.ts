@@ -1,5 +1,5 @@
 /**
- * OAuth 与设备码登录相关 API
+ * OAuth and device-code login API
  */
 
 import { apiClient } from './client';
@@ -13,7 +13,7 @@ import {
 } from '@/utils/providerKeys';
 
 export type BuiltInOAuthProvider =
-  'codex' | 'anthropic' | 'antigravity' | 'kimi' | 'kimi-ai' | 'xai' | 'devin' | 'meta';
+  'codex' | 'anthropic' | 'antigravity' | 'kimi' | 'kimi-ai' | 'xai' | 'devin' | 'meta' | 'zcode';
 
 export interface OAuthStartResponse {
   url: string;

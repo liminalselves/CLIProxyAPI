@@ -9,6 +9,7 @@ import type {
   MarketplaceModel,
   ModelPerformance,
   PersonalKey,
+  SharedKeyRef,
   Summary,
   UsageEntry,
 } from '@/features/sharing/types';
@@ -27,6 +28,15 @@ export interface ProviderPayload {
   models?: ProviderModelInput[];
   disabled?: boolean;
 }
+
+type PersonalKeyResponse = Omit<PersonalKey, 'blocked_models'> & {
+  blocked_models?: string[] | null;
+};
+
+const normalizePersonalKey = (key: PersonalKeyResponse): PersonalKey => ({
+  ...key,
+  blocked_models: key.blocked_models ?? [],
+});
 
 export const sharingPath = (path: string) => `/v8/hub${path}`;
 export const sharingApi = {
@@ -88,11 +98,22 @@ export const sharingApi = {
     apiClient.get<{ models: MarketplaceModel[]; channels: Channel[] }>(sharingPath('/marketplace')),
   marketplacePerformance: () =>
     apiClient.get<{ models: ModelPerformance[] }>(sharingPath('/marketplace/performance')),
-  keys: () => apiClient.get<{ keys: PersonalKey[] }>(sharingPath('/keys')),
-  createKey: (name: string) =>
-    apiClient.post<{ key: PersonalKey; secret: string }>(sharingPath('/keys'), { name }),
-  updateKey: (id: string, body: { name?: string; disabled?: boolean; auto_balance?: boolean }) =>
-    apiClient.patch(sharingPath(`/keys/${encodeURIComponent(id)}`), body),
+  keys: async () => {
+    const response = await apiClient.get<{ keys: PersonalKeyResponse[] }>(sharingPath('/keys'));
+    return { keys: response.keys.map(normalizePersonalKey) };
+  },
+  allKeys: () => apiClient.get<{ keys: SharedKeyRef[] }>(sharingPath('/keys/all')),
+  createKey: async (name: string) => {
+    const response = await apiClient.post<{ key: PersonalKeyResponse; secret: string }>(
+      sharingPath('/keys'),
+      { name }
+    );
+    return { ...response, key: normalizePersonalKey(response.key) };
+  },
+  updateKey: (
+    id: string,
+    body: { name?: string; disabled?: boolean; auto_balance?: boolean; blocked_models?: string[] }
+  ) => apiClient.patch(sharingPath(`/keys/${encodeURIComponent(id)}`), body),
   revokeKey: (id: string) => apiClient.delete(sharingPath(`/keys/${encodeURIComponent(id)}`)),
   users: () => apiClient.get<{ users: Account[] }>(sharingPath('/users')),
   updateUser: (id: string, body: { disabled?: boolean; role?: string }) =>

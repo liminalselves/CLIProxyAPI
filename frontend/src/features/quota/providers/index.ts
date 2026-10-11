@@ -1,9 +1,4 @@
-/**
- * 额度提供商适配器 = 数据层（data.ts，React-free）+ 渲染体（*QuotaBody.tsx）。
- *
- * 页面侧以擦除泛型的 QuotaAdapter 视图统一消费（与 AuthFileQuotaSection 的
- * 窄接口 cast 同一模式）；具体状态类型由各 data.ts 的强类型导出承载。
- */
+/** Shared quota adapter view; provider data modules retain their concrete state types. */
 
 import type { ComponentType } from 'react';
 import type { TFunction } from 'i18next';
@@ -25,8 +20,10 @@ import { KIMI_CONFIG } from './kimi/data';
 import { KimiQuotaBody } from './kimi/KimiQuotaBody';
 import { XAI_CONFIG } from './xai/data';
 import { XaiQuotaBody } from './xai/XaiQuotaBody';
+import { ZCODE_CONFIG } from './zcode/data';
+import { ZCodeQuotaBody } from './zcode/ZCodeQuotaBody';
 
-/** 所有 provider 额度状态的公共骨架（各 *QuotaState 的结构子集）。 */
+/** Common state shape shared by every provider. */
 export interface QuotaCardState {
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: string;
@@ -39,7 +36,8 @@ export interface QuotaAdapter {
   filterFn: (file: AuthFileItem) => boolean;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
   enrichQuota?: (file: AuthFileItem, data: unknown, t: TFunction) => Promise<unknown>;
-  resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
+  resetQuota?: (file: AuthFileItem, t: TFunction, option?: string) => Promise<unknown>;
+  getResetOptions?: (quota: QuotaCardState, t: TFunction) => { value: string; label: string }[];
   canResetQuota?: (quota: QuotaCardState) => boolean;
   storeSelector: (state: QuotaStore) => Record<string, QuotaCardState>;
   storeSetter: keyof QuotaStore;
@@ -60,16 +58,17 @@ export const QUOTA_ADAPTERS: Record<QuotaProviderType, QuotaAdapter> = {
   kimi: { ...KIMI_CONFIG, Body: KimiQuotaBody } as unknown as QuotaAdapter,
   meta: { ...META_CONFIG, Body: MetaQuotaBody } as unknown as QuotaAdapter,
   xai: { ...XAI_CONFIG, Body: XaiQuotaBody } as unknown as QuotaAdapter,
+  zcode: { ...ZCODE_CONFIG, Body: ZCodeQuotaBody } as unknown as QuotaAdapter,
 };
 
 export type QuotaMapUpdater = (
   updater: (prev: Record<string, QuotaCardState>) => Record<string, QuotaCardState>
 ) => void;
 
-/** 取 adapter 对应的 store setter（getState 直读，不建立订阅）。 */
+/** Direct store access without a React subscription. */
 export const getQuotaSetter = (adapter: QuotaAdapter): QuotaMapUpdater =>
   useQuotaStore.getState()[adapter.storeSetter] as unknown as QuotaMapUpdater;
 
-/** 取 adapter 对应的额度缓存快照（getState 直读，不建立订阅）。 */
+/** Direct cache access without a React subscription. */
 export const getQuotaMap = (adapter: QuotaAdapter): Record<string, QuotaCardState> =>
   adapter.storeSelector(useQuotaStore.getState() as unknown as QuotaStore);

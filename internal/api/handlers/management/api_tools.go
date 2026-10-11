@@ -208,6 +208,10 @@ func (h *Handler) APICall(c *gin.Context) {
 	if hostOverride != "" {
 		req.Host = hostOverride
 	}
+	if errAuth := applyZCodeResetAuthorization(auth, req); errAuth != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errAuth.Error()})
+		return
+	}
 
 	httpClient := &http.Client{
 		Timeout: defaultAPICallTimeout,
@@ -287,6 +291,10 @@ func (h *Handler) resolveTokenForAuth(ctx context.Context, auth *coreauth.Auth, 
 	if strings.EqualFold(strings.TrimSpace(auth.Provider), "xai") {
 		token, errToken := h.resolveXAIToken(ctx, auth, requestProxyURL)
 		return token, errToken
+	}
+
+	if strings.EqualFold(strings.TrimSpace(auth.Provider), "zcode") {
+		return h.resolveZCodeToken(ctx, auth, requestProxyURL)
 	}
 
 	return tokenValueForAuth(auth), nil

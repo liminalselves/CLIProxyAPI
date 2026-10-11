@@ -66,7 +66,7 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 		t.Fatalf("auto balance metadata = %v, want false", result.Metadata["key_auto_balance"])
 	}
 	enable := true
-	if err := s.UpdateKey(bob, first.ID, nil, nil, &enable, false); err != nil {
+	if err := s.UpdateKey(bob, first.ID, nil, nil, &enable, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, key, ok := s.AuthenticateKey(secret); !ok || !key.AutoBalance {
@@ -96,7 +96,7 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if strings.Contains(string(raw), secret) || strings.Contains(string(raw), sessionToken) || strings.Contains(string(raw), "password-bob") {
 		t.Fatal("account store contains plaintext key, session, or password")
 	}
-	if err := s.UpdateKey(admin, first.ID, nil, nil, nil, true); err != nil {
+	if err := s.UpdateKey(admin, first.ID, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, ok := s.AuthenticateKey(secret); ok {
@@ -245,7 +245,7 @@ func TestChannelsAndKeysEnforceOwnerWithAdminOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpdateKey(bob, key.ID, nil, nil, nil, true); !errors.Is(err, ErrDenied) {
+	if err := s.UpdateKey(bob, key.ID, nil, nil, nil, nil, true); !errors.Is(err, ErrDenied) {
 		t.Fatal("member revoked another user's key")
 	}
 }
@@ -253,7 +253,7 @@ func TestChannelsAndKeysEnforceOwnerWithAdminOverride(t *testing.T) {
 func TestUsageAttributionRetryTotalsAndPersistence(t *testing.T) {
 	s, _, _ := testAccounts(t)
 	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	base := usage.Record{Attribution: usage.Attribution{SiteID: s.SiteID(), Consumer: "bob", KeyID: "key-one", KeyName: "手机", Owner: "alice", ChannelID: "ch-one", Channel: "alice-gpt", CredentialName: "cred.json"}, RequestedAt: at, AuthID: "cred.json", Alias: "alice-gpt/gpt-5", Model: "gpt-5", TraceID: "trace-one", RequestID: "attempt-one", Failed: true, Fail: usage.Failure{StatusCode: 429}}
+	base := usage.Record{Attribution: usage.Attribution{SiteID: s.SiteID(), Consumer: "bob", KeyID: "key-one", KeyName: "手机", Owner: "alice", ChannelID: "ch-one", Channel: "alice-gpt", CredentialName: "cred.json"}, RequestedAt: at, AuthID: "cred.json", Alias: "alice-gpt/gpt-5", Model: "gpt-5", TraceID: "trace-one", RequestID: "attempt-one", ReasoningEffort: "high", Failed: true, Fail: usage.Failure{StatusCode: 429}}
 	s.HandleUsage(context.Background(), base)
 	base.RequestID = "attempt-two"
 	base.Failed = false
@@ -279,6 +279,9 @@ func TestUsageAttributionRetryTotalsAndPersistence(t *testing.T) {
 	items, count, err := reopened.Usage(Filter{Consumer: "bob", Owner: "alice", KeyID: "key-one"})
 	if err != nil || count != 2 || len(items) != 2 || items[0].KeyName != "手机" {
 		t.Fatalf("wrong usage filter: %#v %d %v", items, count, err)
+	}
+	if items[0].ReasoningEffort != "high" || items[1].ReasoningEffort != "high" {
+		t.Fatalf("reasoning effort not persisted: %#v", items)
 	}
 	items, _, err = reopened.Usage(Filter{From: at.Add(time.Second)})
 	if err != nil || len(items) != 0 {
@@ -568,5 +571,43 @@ func TestBoardMessagesPagingCapAndDeletePermissions(t *testing.T) {
 	s.mu.RUnlock()
 	if stored != boardMessagesPerChan {
 		t.Fatalf("board cap not enforced: %d", stored)
+	}
+}
+
+func TestMatchUsageModelAndKeyQueries(t *testing.T) {
+	bare := UsageEvent{Model: "deepseek-flash", Channel: "ch1", KeyID: "phone-key", Consumer: "alice"}
+	routed := UsageEvent{Model: "ch1/kimi-k3", Channel: "ch1", KeyID: "work-key", Consumer: "bob"}
+	other := UsageEvent{Model: "deepseek-flash", Channel: "ch2", KeyID: "backup-key", Consumer: "alice"}
+
+	cases := []struct {
+		name  string
+		event UsageEvent
+		model string
+		keyID string
+		want  bool
+	}{
+		{"existing model substring", bare, "deepseek", "", true},
+		{"channel text does not add a list filter", bare, "ch1", "", false},
+		{"serving substring does not add a list filter", bare, "ch1/deepseek", "", false},
+		{"full-width pin matches", bare, "deepseek-flash（ch1/deepseek-flash）", "", true},
+		{"ascii pin matches", bare, "deepseek-flash(ch1/deepseek-flash)", "", true},
+		{"pin on other channel misses", other, "deepseek-flash（ch1/deepseek-flash）", "", false},
+		{"pin hits routed model id", routed, "kimi（ch1/kimi-k3）", "", true},
+		{"paren without slash stays literal substring", bare, "deepseek（flash）", "", false},
+		{"routed model keeps substring match", routed, "kimi-k3", "", true},
+		{"key id exact", bare, "", "phone-key", true},
+		{"key id prefix does not match", bare, "", "phone", false},
+		{"other key id does not match", bare, "", "work-key", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchUsage(tc.event, Filter{Model: tc.model, KeyID: tc.keyID})
+			if got != tc.want {
+				t.Fatalf("matchUsage(model=%q keyID=%q) = %v, want %v", tc.model, tc.keyID, got, tc.want)
+			}
+		})
+	}
+	if !matchUsage(bare, Filter{Consumer: "alice"}) || !matchUsage(other, Filter{Consumer: "alice"}) || matchUsage(routed, Filter{Consumer: "alice"}) {
+		t.Fatal("consumer selection must match all and only that member's keys")
 	}
 }

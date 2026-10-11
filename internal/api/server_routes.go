@@ -667,6 +667,16 @@ func (s *Server) handleGrokModels(c *gin.Context) {
 	} else {
 		models = grokModelsFromRegistryInfos(registry.GetGlobalRegistry().GetAvailableModelInfos())
 	}
+	if s.hub != nil {
+		summaries := make([]map[string]any, 0, len(models))
+		for _, model := range models {
+			summaries = append(summaries, map[string]any{"id": model.ID, "display_name": model.DisplayName, "context_length": model.ContextLength, "reasoning_levels": model.ReasoningLevels})
+		}
+		models = make([]grokbuild.ModelInfo, 0, len(models))
+		for _, model := range s.handlers.FilterModelsForRequest(c, summaries) {
+			models = append(models, grokbuild.ModelInfo{ID: model["id"].(string), DisplayName: model["display_name"].(string), ContextLength: model["context_length"].(int), ReasoningLevels: model["reasoning_levels"].([]string)})
+		}
+	}
 	s.writeModelListResponse(c, "openai", grokbuild.BuildResponse(models))
 }
 

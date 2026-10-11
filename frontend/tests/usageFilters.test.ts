@@ -1,0 +1,81 @@
+import { describe, expect, test } from 'bun:test';
+import { matchesAutocompleteQuery } from '../src/components/ui/autocompleteMatching';
+import {
+  buildModelCandidateQuery,
+  resolveUsageKey,
+  resolveUsageModel,
+  type UsageKeyOption,
+} from '../src/features/sharing/usageFilters';
+
+const models = ['deepseek-flash', 'deepseek-flash（123-123/deepseek-flash）', 'kimi-k3'];
+const keys: UsageKeyOption[] = [
+  { label: '@alice', consumer: 'alice' },
+  { label: '@bob', consumer: 'bob' },
+  { label: '手机（@alice）', keyId: 'phone-id' },
+  { label: '工作（@alice）', keyId: 'work-id' },
+  { label: '手机（@bob）', keyId: 'bob-phone-id' },
+];
+
+describe('usage autocomplete candidates', () => {
+  test('candidate query ignores the applied model filter and pagination', () => {
+    const parsed = new URLSearchParams(
+      buildModelCandidateQuery(
+        'scope=contributed&model=deepseek-flash&page=3&page_size=50&channel_id=c1&from=2026-10-01T00%3A00%3A00.000Z',
+        'contributed',
+        'alice'
+      )
+    );
+    expect(parsed.get('model')).toBeNull();
+    expect(parsed.get('page')).toBeNull();
+    expect(parsed.get('page_size')).toBeNull();
+    expect(parsed.get('scope')).toBeNull();
+    expect(parsed.get('channel_id')).toBe('c1');
+    expect(parsed.get('from')).toBe('2026-10-01T00:00:00.000Z');
+    expect(parsed.get('owner')).toBe('alice');
+    expect(parsed.get('consumer')).toBeNull();
+  });
+
+  test('candidate query keeps scope identity for mine and site', () => {
+    const mine = new URLSearchParams(buildModelCandidateQuery('model=x', 'mine', 'alice'));
+    expect(mine.get('consumer')).toBe('alice');
+    expect(mine.get('owner')).toBeNull();
+    const site = new URLSearchParams(buildModelCandidateQuery('model=x', 'site', 'alice'));
+    expect(site.get('consumer')).toBeNull();
+    expect(site.get('owner')).toBeNull();
+  });
+
+  test('partial text narrows model candidates without becoming a model filter', () => {
+    expect(models.filter((model) => matchesAutocompleteQuery(model, 'FLASH'))).toEqual(models.slice(0, 2));
+    expect(resolveUsageModel('FLASH', models)).toBeNull();
+    expect(models.filter((model) => matchesAutocompleteQuery(model, '123-123'))).toEqual([models[1]]);
+    expect(resolveUsageModel('123-123', models)).toBeNull();
+  });
+
+  test('Key and member fragments narrow candidates but do not resolve to list filters', () => {
+    expect(keys.filter((key) => matchesAutocompleteQuery(key.label, '手机'))).toHaveLength(2);
+    expect(keys.filter((key) => matchesAutocompleteQuery(key.label, '@ali'))).toHaveLength(3);
+    expect(resolveUsageKey('手机', keys)).toBeNull();
+    expect(resolveUsageKey('@ali', keys)).toBeNull();
+  });
+
+  test('complete Key and member options resolve to exact identities', () => {
+    expect(resolveUsageKey('手机（@alice）', keys)).toEqual(keys[2]);
+    expect(resolveUsageKey('手机(@bob)', keys)).toEqual(keys[4]);
+    expect(resolveUsageKey('@alice', keys)).toEqual(keys[0]);
+    expect(resolveUsageKey('@ALICE', keys)).toEqual(keys[0]);
+  });
+
+  test('complete model choices accept both parentheses and normalize to the candidate', () => {
+    expect(matchesAutocompleteQuery(models[1], 'flash(123-123/')).toBe(true);
+    expect(resolveUsageModel('deepseek-flash(123-123/deepseek-flash)', models)).toBe(models[1]);
+    expect(resolveUsageModel('deepseek-flash', models)).toBe(models[0]);
+  });
+
+  test('clearing removes the filter and saved model selections survive empty candidates', () => {
+    expect(resolveUsageKey('', keys)).toEqual({ label: '' });
+    expect(resolveUsageModel('', models)).toBe('');
+    expect(resolveUsageModel(models[1], [], models[1])).toBe(models[1]);
+    expect(resolveUsageModel('flash', [], models[1])).toBeNull();
+    expect(resolveUsageKey('不存在', keys)).toBeNull();
+  });
+});

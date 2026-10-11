@@ -90,9 +90,14 @@ export function collectQuotaRowInstants(
   const state = quota as { status?: string } | undefined;
   if (!state || state.status !== 'success') return [];
 
-  if (provider === 'claude' || provider === 'codex' || provider === 'devin') {
+  if (
+    provider === 'claude' ||
+    provider === 'codex' ||
+    provider === 'devin' ||
+    provider === 'zcode'
+  ) {
     const windows = collectRows((quota as { windows?: WindowLike[] }).windows ?? [], 'window');
-    if (provider !== 'codex') return windows;
+    if (provider !== 'codex' && provider !== 'zcode') return windows;
 
     const credits = (
       (quota as { rateLimitResetCredits?: ResetCreditLike[] }).rateLimitResetCredits ?? []

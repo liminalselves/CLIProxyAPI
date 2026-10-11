@@ -2,6 +2,7 @@ package multiuser
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -31,7 +32,8 @@ func (p *AccessProvider) Authenticate(_ context.Context, r *http.Request) (*sdka
 			if key.AutoBalance {
 				autoBalance = "true"
 			}
-			return &sdkaccess.Result{Provider: AccessProviderID, Principal: key.ID, Metadata: map[string]string{"site_id": p.Store.SiteID(), "username": user.Username, "key_id": key.ID, "key_name": key.Name, "key_auto_balance": autoBalance}}, nil
+			blockedModels, _ := json.Marshal(key.BlockedModels)
+			return &sdkaccess.Result{Provider: AccessProviderID, Principal: key.ID, Metadata: map[string]string{"site_id": p.Store.SiteID(), "username": user.Username, "key_id": key.ID, "key_name": key.Name, "key_auto_balance": autoBalance, "key_blocked_models": string(blockedModels)}}, nil
 		}
 	}
 	if !provided {

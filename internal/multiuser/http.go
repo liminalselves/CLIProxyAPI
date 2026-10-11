@@ -131,6 +131,20 @@ func (h *Controller) RegisterRoutes(public, member *gin.RouterGroup) {
 	})
 	member.POST("/me/password", h.password)
 	member.GET("/keys", func(c *gin.Context) { c.JSON(200, gin.H{"keys": h.Store.Keys(CurrentUser(c))}) })
+	member.GET("/keys/all", func(c *gin.Context) {
+		// Usage filters need every member's key name; never expose key hints here.
+		type keyRef struct {
+			ID    string `json:"id"`
+			Owner string `json:"owner"`
+			Name  string `json:"name"`
+		}
+		keys := h.Store.KeysAll()
+		out := make([]keyRef, 0, len(keys))
+		for _, key := range keys {
+			out = append(out, keyRef{ID: key.ID, Owner: key.Owner, Name: key.Name})
+		}
+		c.JSON(200, gin.H{"keys": out})
+	})
 	member.POST("/keys", h.createKey)
 	member.PATCH("/keys/:id", h.updateKey)
 	member.DELETE("/keys/:id", h.deleteKey)
@@ -225,19 +239,20 @@ func (h *Controller) createKey(c *gin.Context) {
 
 func (h *Controller) updateKey(c *gin.Context) {
 	var body struct {
-		Name        *string `json:"name"`
-		Disabled    *bool   `json:"disabled"`
-		AutoBalance *bool   `json:"auto_balance"`
+		Name          *string   `json:"name"`
+		Disabled      *bool     `json:"disabled"`
+		AutoBalance   *bool     `json:"auto_balance"`
+		BlockedModels *[]string `json:"blocked_models"`
 	}
 	if !bind(c, &body) {
 		return
 	}
 	h.record(c, "key.update", c.Param("id"))
-	if body.Name == nil && body.Disabled == nil && body.AutoBalance == nil {
+	if body.Name == nil && body.Disabled == nil && body.AutoBalance == nil && body.BlockedModels == nil {
 		replyError(c, ErrInvalid)
 		return
 	}
-	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), body.Name, body.Disabled, body.AutoBalance, false); err != nil {
+	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), body.Name, body.Disabled, body.AutoBalance, body.BlockedModels, false); err != nil {
 		replyError(c, err)
 		return
 	}
@@ -246,7 +261,7 @@ func (h *Controller) updateKey(c *gin.Context) {
 
 func (h *Controller) deleteKey(c *gin.Context) {
 	h.record(c, "key.revoke", c.Param("id"))
-	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), nil, nil, nil, true); err != nil {
+	if err := h.Store.UpdateKey(CurrentUser(c), c.Param("id"), nil, nil, nil, nil, true); err != nil {
 		replyError(c, err)
 		return
 	}

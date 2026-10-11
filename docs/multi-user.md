@@ -64,6 +64,48 @@ hyphen, is unique across the whole site, and cannot change after creation becaus
 model IDs depend on it. There are no separate account display names or channel
 names. Existing usernames, identifiers and pinned model IDs remain unchanged.
 
+## ZCode OAuth
+
+Select **ZCode · GLM Coding Plan** on the OAuth page after choosing a channel.
+Open the authorization link and sign in to BigModel within five minutes. The
+server polls the official ZCode authorization flow; no local callback port or
+pasted callback URL is required. Cancellation stops the pending login.
+
+This integration uses a **personal GLM Coding Plan** only, not ZCode Start Plan,
+team subscriptions, or international Z.ai accounts. It reuses or creates the
+personal project's `zcode-api-key` and obtains a short-lived project access token.
+The account login token is stored separately and is never sent to inference.
+Project tokens are refreshed before expiry; an expired account login requires
+another OAuth login. Credential ownership and channel prefixes follow the same
+rules as other providers.
+
+The model catalog contains `glm-5.3`, `glm-5.3-flash`, `glm-5.2`, and `glm-5-turbo`.
+Requests use the OpenAI-compatible Coding Plan endpoint, with the existing
+translation, streaming, usage accounting and payload configuration pipeline.
+The quota page and credential cards query `bigmodel.cn/api/monitor/usage/quota/limit`
+through the existing API-call proxy. Project tokens are refreshed before queries
+and attached server-side without a `Bearer` prefix. The cards reuse the Codex
+quota body, labels, manual-reset count and expiry display; subscription metadata
+is not queried or displayed. The timeline projects fixed five-hour/weekly windows
+and shows reset-card expiries, not calendar-month tool limits.
+
+Manual reset cards use `zcode.z.ai/api/v1/coding-plan/reset/status` and `/use`.
+The server attaches the separately stored ZCode JWT and BigModel business token.
+The existing reset button and confirmation are shared with Codex; a selector
+chooses five-hour or weekly cards, and confirmation consumes one card then reloads
+quota. Requests use an idempotency key. Existing credentials without the ZCode JWT
+must be authorized again before reset cards can be queried or consumed. Failed
+reset-card queries do not erase valid quota data. No reset-opportunity requests or
+history writes are triggered automatically.
+
+CLI login is available with `--zcode-login` (and optional `--no-browser`), using the
+same OAuth flow and token store. Protocol behavior is based on the official ZCode
+3.14.5 client. Verification uses mock responses; real-account authorization,
+inference, quota and reset-card consumption remain unverified.
+
+References: [official setup guide](https://docs.bigmodel.cn/cn/coding-plan/tool/zcode)
+and [official built-in model catalog](https://cdn-zcode.z.ai/zcode/config/zcode-builtin-23.json).
+
 ## Model naming
 
 Model IDs contain no username; they are `channel-source/model`:
@@ -139,14 +181,32 @@ across every published credential serving that model across all channels, and a
 failed attempt fails over to the next credential until all have been tried.
 Chat, Messages, Gemini and Responses requests plus the image endpoints
 (`/v1/images/generations`, `/v1/images/edits`; see [Image API](image-api.md))
-follow this routing. Bare names are not listed in `/v1/models`; the marketplace shows the base model names to
-use. For keys without the flag, bare model IDs and automatic cross-channel
-selection are not supported, and the console enforces this independently of
+follow this routing. Model-list endpoints include deduplicated bare model names
+alongside pinned IDs only for keys with `auto_balance` enabled. A bare name is
+included only when at least one published, non-disabled route remains available
+to that key. For keys without the flag, bare model IDs and automatic cross-channel
+selection are not supported, independently of
 `routing.force-model-prefix`. In multi-user mode the legacy `access.api-keys`
 list does not authenticate proxy callers: use personal keys created in the
 console. Web login sessions are not proxy API keys.
 Plugin model routers do not reroute calls in this mode: a selected channel cannot
 silently become another provider or an external plugin-owned execution route.
+
+Keys expose a `blocked_models` string array in `GET /v8/hub/keys`. Update it with
+`PATCH /v8/hub/keys/:id`; the supplied array replaces the entire blocklist, `[]`
+clears it, and omitting the field leaves it unchanged. A complete pinned ID
+blocks only that source/model route; a bare model name blocks that model across
+all sources. Entries are trimmed and deduplicated; blank entries are rejected.
+Unavailable or withdrawn model IDs may still be stored so exclusions survive
+later publication. Thinking suffixes do not bypass exclusions.
+
+Blocked routes are removed from proxy model lists and from credential selection,
+including streaming, token counting, image calls, retries and even load
+balancing. For example, excluding both `123/deepseek` and `564/deepseek` removes
+those pinned IDs and the bare `deepseek` entry when no other source serves it.
+Excluding only one preserves the bare entry and routes bare calls exclusively to
+the remaining sources. Explicitly blocked calls return HTTP 403 (`model_blocked`).
+The marketplace remains the unfiltered source catalog for the key editor.
 
 Publishing or withdrawing a channel updates its credential metadata and model
 registrations. Individual credentials can be disabled or removed. An optional
@@ -172,7 +232,8 @@ The console has two related records:
   key name, and elapsed time, including failures before any upstream execution.
 - **Usage records** describe each upstream attempt, with the caller, key identity,
   credential owner, channel, credential identity, model, streaming flag, status,
-  input/output/cache/reasoning tokens, elapsed time, and trace/request IDs. Retries
+  input/output/cache/reasoning tokens, the translated reasoning effort, elapsed
+  time, and trace/request IDs. Retries
   remain separate, so usage is attributed to the credential actually attempted.
 
 Status 499 is displayed as **Request interrupted**: the caller interrupted the
@@ -229,7 +290,7 @@ The account API base is `/v8/hub`. Protected endpoints accept
 | `/register`, `/login` | POST | Public; register accepts `username`, `password` and `invite` only. Invitation required except first account. |
 | `/me` | GET | Read account identity; usernames are immutable. |
 | `/me/password`, `/logout` | POST | Change own password / end own session. |
-| `/keys`, `/keys/:id` | GET, POST / PATCH, DELETE | Personal keys; delete revokes and retains history. PATCH accepts `name`, `disabled` and `auto_balance` (bare base model names with even load balancing). |
+| `/keys`, `/keys/:id` | GET, POST / PATCH, DELETE | Personal keys; delete revokes and retains history. PATCH accepts `name`, `disabled`, `auto_balance` and `blocked_models`; see [Channels and routing](#channels-and-routing) for key policy semantics. |
 | `/channels`, `/channels/:id` | GET, POST / PATCH | Create with `slug` and optional `public`. PATCH accepts only `published`, `announcement` (channel managers) and `public` (owner/admin only); the identifier is immutable. |
 | `/channels/:id` | DELETE | Owner/admin removes an empty channel (409 while credentials/providers are still mounted); board messages are removed with it. |
 | `/channels/:id/messages` | GET, POST | Channel message board; all members read/post, cursor paging via `before_id`/`limit`. |
@@ -267,3 +328,11 @@ History filters: `consumer`, `owner`, `channel_id`, `credential_id`, `key_id`,
 is inclusive and `to` is exclusive. Audit filters additionally include `actor`
 and `action`. Owner/channel/credential filters apply to upstream usage, not the
 client-call table, because early client errors have no serving credential.
+The usage page matches partial input against dropdown candidates only; incomplete
+model/Key input cannot be submitted. Key choices resolve to an exact `key_id`,
+and `@username` choices resolve to `consumer` (all of that member's keys).
+Model choices retain the existing requested-model matching; a trailing
+`model(channel/model)` or `model（channel/model）` pins the serving channel for
+bare-model calls. There is no fuzzy Key-name history query. Model candidates come
+from a summary that ignores the applied `model` filter and pagination, so
+narrowing the list never collapses the dropdown to the selected model.

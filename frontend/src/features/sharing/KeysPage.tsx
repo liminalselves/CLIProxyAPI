@@ -17,6 +17,9 @@ import { sharingApi } from '@/services/api/sharing';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { LoadState, PageHeader } from './shared';
 import { useSharingActions, useSharingData, date } from './hooks';
+import { KeyModelFilterEditor } from './KeyModelFilterEditor';
+import { normalizeKeyBlockedModels } from './keyFilters';
+import type { PersonalKey } from './types';
 import styles from './Sharing.module.scss';
 
 export function KeysPage() {
@@ -28,32 +31,47 @@ export function KeysPage() {
   const { run, confirm, copy } = useSharingActions(refresh);
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [blockedModels, setBlockedModels] = useState<string[]>([]);
   const [secret, setSecret] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const editingKey = data?.keys.find((key) => key.id === editing) ?? null;
+  const openCreate = () => {
+    setEditing('');
+    setName('');
+    setBlockedModels([]);
+  };
+  const openEdit = (key: PersonalKey) => {
+    setEditing(key.id);
+    setName(key.name);
+    setBlockedModels(key.blocked_models);
+  };
+  const filterSummary = (key: PersonalKey) =>
+    key.blocked_models.length
+      ? t('sharing.blocked_models_count', { count: key.blocked_models.length })
+      : t('sharing.blocked_models_all');
   const save = async () => {
     setSaving(true);
     await run(async () => {
-      if (editing) await sharingApi.updateKey(editing, { name });
-      else setSecret((await sharingApi.createKey(name)).secret);
+      if (editing) {
+        await sharingApi.updateKey(editing, {
+          name: name.trim(),
+          blocked_models: normalizeKeyBlockedModels(blockedModels),
+        });
+      } else {
+        setSecret((await sharingApi.createKey(name.trim())).secret);
+      }
       setEditing(null);
     });
     setSaving(false);
   };
+
   return (
     <div className={styles.page}>
       <PageHeader
         title={t('sharing.keys')}
         hint={t('sharing.keys_hint')}
-        actions={
-          <Button
-            onClick={() => {
-              setEditing('');
-              setName('');
-            }}
-          >
-            {t('sharing.create_key')}
-          </Button>
-        }
+        actions={<Button onClick={openCreate}>{t('sharing.create_key')}</Button>}
       />
       <LoadState loading={loading} error={error} />
       {isMobile ? (
@@ -86,18 +104,21 @@ export function KeysPage() {
                   }
                 />
               </div>
+              <div className={styles.keyCardBalance}>
+                <span className={styles.cellSecondary}>{t('sharing.blocked_models')}</span>
+                <span
+                  className={
+                    key.blocked_models.length ? styles.keyFilterActive : styles.cellSecondary
+                  }
+                >
+                  {filterSummary(key)}
+                </span>
+              </div>
               <div className={styles.keyCardActions}>
                 <Link to={'/usage?key_id=' + key.id} className="btn btn-secondary btn-sm">
                   {t('sharing.view_usage')}
                 </Link>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setName(key.name);
-                    setEditing(key.id);
-                  }}
-                >
+                <Button variant="secondary" size="sm" onClick={() => openEdit(key)}>
                   {t('common.edit')}
                 </Button>
                 <Button
@@ -117,7 +138,15 @@ export function KeysPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              {['name', 'key_hint', 'enabled', 'auto_balance', 'created', 'actions'].map((key) => (
+              {[
+                'name',
+                'key_hint',
+                'enabled',
+                'auto_balance',
+                'blocked_models',
+                'created',
+                'actions',
+              ].map((key) => (
                 <TableHead key={key}>{t('sharing.' + key)}</TableHead>
               ))}
             </TableRow>
@@ -145,20 +174,22 @@ export function KeysPage() {
                     }
                   />
                 </TableCell>
+                <TableCell>
+                  <span
+                    className={
+                      key.blocked_models.length ? styles.keyFilterActive : styles.cellSecondary
+                    }
+                  >
+                    {filterSummary(key)}
+                  </span>
+                </TableCell>
                 <TableCell>{date(key.created_at)}</TableCell>
                 <TableCell>
                   <div className={styles.actions}>
                     <Link to={'/usage?key_id=' + key.id} className="btn btn-secondary btn-sm">
                       {t('sharing.view_usage')}
                     </Link>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setName(key.name);
-                        setEditing(key.id);
-                      }}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => openEdit(key)}>
                       {t('common.edit')}
                     </Button>
                     <Button
@@ -184,7 +215,8 @@ export function KeysPage() {
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={t(editing ? 'sharing.rename_key' : 'sharing.create_key')}
+        title={t(editing ? 'sharing.edit_key' : 'sharing.create_key')}
+        width={editing ? 760 : 520}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditing(null)}>
@@ -202,6 +234,7 @@ export function KeysPage() {
           maxLength={64}
           onChange={(event) => setName(event.target.value)}
         />
+        {editingKey && <KeyModelFilterEditor value={blockedModels} onChange={setBlockedModels} />}
       </Modal>
       <Modal
         open={Boolean(secret)}

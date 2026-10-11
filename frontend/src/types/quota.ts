@@ -74,6 +74,8 @@ export interface CodexRateLimitResetCredit {
   status: string;
   grantedAt: string;
   expiresAt: string;
+  labelKey?: string;
+  resetType?: 'FIVE_HOUR' | 'WEEK';
 }
 
 export interface CodexAccountCredits {
@@ -370,6 +372,28 @@ export interface KimiQuotaRow {
 export interface KimiQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   rows: KimiQuotaRow[];
+  error?: string;
+  errorStatus?: number;
+}
+
+export interface ZCodeQuotaWindow {
+  id: string;
+  label: string;
+  labelKey: string;
+  labelParams?: Record<string, string | number>;
+  resetLabel: string;
+  usedPercent: number | null;
+  resetAtMs: number | null;
+  periodHours: number | null;
+  models: string[];
+}
+
+export interface ZCodeQuotaState extends Pick<
+  CodexQuotaState,
+  'rateLimitResetCreditsAvailableCount' | 'rateLimitResetCredits' | 'rateLimitResetCreditsError'
+> {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  windows: ZCodeQuotaWindow[];
   error?: string;
   errorStatus?: number;
 }

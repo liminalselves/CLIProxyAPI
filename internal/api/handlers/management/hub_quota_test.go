@@ -8,6 +8,9 @@ func TestHubQuotaRouteAllowlist(t *testing.T) {
 		host     string
 		path     string
 	}{
+		{"zcode", "bigmodel.cn", "/api/monitor/usage/quota/limit"},
+		{"zcode", "zcode.z.ai", "/api/v1/coding-plan/reset/status"},
+		{"zcode", "zcode.z.ai", "/api/v1/coding-plan/reset/use"},
 		{"kimi", "api.kimi.com", "/coding/v1/usages"},
 		{"kimi", "api.kimi.ai", "/coding/v1/usages"},
 		{"claude", "api.anthropic.com", "/api/oauth/usage"},
@@ -34,6 +37,9 @@ func TestHubQuotaRouteAllowlist(t *testing.T) {
 		// Same host but non-quota paths stay blocked.
 		{"kimi", "api.kimi.com", "/v1/chat/completions"},
 		{"codex", "chatgpt.com", "/backend-api/conversation"},
+		{"zcode", "open.bigmodel.cn", "/api/monitor/usage/quota/limit"},
+		{"zcode", "bigmodel.cn", "/api/biz/subscription/list/other"},
+		{"zcode", "bigmodel.cn", "/api/monitor/usage/quota/limit-other"},
 		// Providers without quota adapters are not proxied at all.
 		{"gemini", "generativelanguage.googleapis.com", "/v1beta/models"},
 		{"openai-compatible", "api.example.com", "/v1/models"},

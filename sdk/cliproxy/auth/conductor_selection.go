@@ -80,6 +80,7 @@ type authSelectionEligibility struct {
 	requiredKind     string
 	credentialPolicy string
 	disallowFreeAuth bool
+	blockedModels    modelBlocklist
 }
 
 func withRequiredAuthKind(ctx context.Context, requiredKind string) context.Context {
@@ -99,7 +100,7 @@ func credentialPolicyFromContext(ctx context.Context) string {
 }
 
 func authSelectionEligibilityForRequest(ctx context.Context, opts cliproxyexecutor.Options) authSelectionEligibility {
-	eligibility := authSelectionEligibility{disallowFreeAuth: disallowFreeAuthFromMetadata(opts.Metadata)}
+	eligibility := authSelectionEligibility{disallowFreeAuth: disallowFreeAuthFromMetadata(opts.Metadata), blockedModels: blockedModelsFromContext(ctx)}
 	if ctx != nil {
 		eligibility.requiredKind, _ = ctx.Value(requiredAuthKindContextKey{}).(string)
 		eligibility.credentialPolicy, _ = ctx.Value(credentialPolicyContextKey{}).(string)
@@ -118,6 +119,20 @@ func (e authSelectionEligibility) allows(auth *Auth) bool {
 		return false
 	}
 	return !e.disallowFreeAuth || !isFreeCodexAuth(auth)
+}
+
+func (e authSelectionEligibility) allowsModel(auth *Auth, model string) bool {
+	if !e.allows(auth) || e.blockedModels.blocks(model) {
+		return false
+	}
+	if !strings.Contains(model, "/") && auth.Prefix != "" {
+		return !e.blockedModels.blocks(auth.Prefix + "/" + model)
+	}
+	return true
+}
+
+func blockedModelError() *Error {
+	return &Error{Code: "model_blocked", Message: "model is blocked for this API key", HTTPStatus: http.StatusForbidden}
 }
 
 func (m *Manager) syncSchedulerFromSnapshot(auths []*Auth) {
@@ -1277,7 +1292,7 @@ func (m *Manager) closestCooldownWaitWithAttempted(providers []string, model str
 		if pinnedAuthID != "" && auth.ID != pinnedAuthID {
 			continue
 		}
-		if !eligibility.allows(auth) {
+		if !eligibility.allowsModel(auth, model) {
 			continue
 		}
 		providerKey := executorKeyFromAuth(auth)
@@ -1369,7 +1384,7 @@ func (m *Manager) retryAllowed(attempt int, providers []string, model string, el
 		if pinnedAuthID != "" && auth.ID != pinnedAuthID {
 			continue
 		}
-		if !eligibility.allows(auth) {
+		if !eligibility.allowsModel(auth, model) {
 			continue
 		}
 		providerKey := executorKeyFromAuth(auth)
@@ -1797,6 +1812,9 @@ func (m *Manager) routeAwareSelectionRequired(auth *Auth, routeModel string) boo
 }
 
 func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, error) {
+	if ModelBlocked(ctx, model) {
+		return nil, nil, blockedModelError()
+	}
 	if m.HomeEnabled() {
 		auth, exec, _, err := m.pickNextViaHome(ctx, model, opts, tried)
 		return auth, exec, err
@@ -1818,6 +1836,7 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		return nil, nil, &Error{Code: "executor_not_found", Message: "executor not registered"}
 	}
 	candidates := make([]*Auth, 0, len(m.auths))
+	blockedCandidates := false
 	modelKey := strings.TrimSpace(model)
 	// Always use base model name (without thinking suffix) for auth matching.
 	if modelKey != "" {
@@ -1844,10 +1863,17 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		if !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
+		if !eligibility.allowsModel(candidate, model) {
+			blockedCandidates = true
+			continue
+		}
 		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
+		if blockedCandidates {
+			return nil, nil, blockedModelError()
+		}
 		return nil, nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 	}
 	available, selectorAuths, errAvailable := m.availableAuthsForSelector(selector, candidates, provider, model, time.Now())
@@ -2116,6 +2142,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 }
 
 func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, string, error) {
+	if ModelBlocked(ctx, model) {
+		return nil, nil, "", blockedModelError()
+	}
 	if m.HomeEnabled() {
 		return m.pickNextViaHome(ctx, model, opts, tried)
 	}
@@ -2143,6 +2172,7 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 	opts.Metadata[cliproxyexecutor.SessionAffinityModelMetadataKey] = selectionArgForSelector(selector, model)
 	pluginScheduler := m.pluginScheduler
 	candidates := make([]*Auth, 0, len(m.auths))
+	blockedCandidates := false
 	modelKey := strings.TrimSpace(model)
 	// Always use base model name (without thinking suffix) for auth matching.
 	if modelKey != "" {
@@ -2178,10 +2208,17 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 		if !m.authSupportsRouteModel(registryRef, candidate, model) {
 			continue
 		}
+		if !eligibility.allowsModel(candidate, model) {
+			blockedCandidates = true
+			continue
+		}
 		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
+		if blockedCandidates {
+			return nil, nil, "", blockedModelError()
+		}
 		return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available"}
 	}
 	available, selectorAuths, errAvailable := m.availableAuthsForSelector(selector, candidates, "mixed", model, time.Now())

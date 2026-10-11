@@ -1,7 +1,4 @@
-/**
- * Codex 额度渲染体：套餐 chip 行（elite=Pro 20x 液态铂金 / premium=金卡）、
- * 重置积分明细、用量窗口水位条。
- */
+/** Shared Codex-style quota windows and manual reset credits. */
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,22 +21,25 @@ import { collectQuotaRowInstants, pickUrgentRowId, resetCreditRowId } from '../.
 import type { QuotaBodyProps, QuotaClassMap } from '../../types';
 
 const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): string => {
-  // elite/premium 顺序契约由 resolvePlanTier 承载（tests/quotaPlanTier.test.ts 守护）。
   const tier = resolvePlanTier(planType);
   if (tier === 'elite') return classes.elitePlanValue;
   if (tier === 'premium') return classes.premiumPlanValue;
   return classes.codexPlanValue;
 };
 
-export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaState>) {
+export function CodexQuotaBody({
+  quota,
+  classes,
+  provider = 'codex',
+}: QuotaBodyProps<CodexQuotaState> & { provider?: 'codex' | 'zcode' }) {
   const { t, i18n } = useTranslation();
   const now = useNow();
   const locale = i18n.resolvedLanguage;
   // Windows and reset credits compete for the same emphasis, but only during
   // the final hour before the reset or expiry.
   const soonestRowId = useMemo(
-    () => pickUrgentRowId(collectQuotaRowInstants('codex', quota), now),
-    [quota, now]
+    () => pickUrgentRowId(collectQuotaRowInstants(provider, quota), now),
+    [provider, quota, now]
   );
   const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;
@@ -154,6 +154,7 @@ export function CodexQuotaBody({ quota, classes }: QuotaBodyProps<CodexQuotaStat
               >
                 <span className={classes.codexResetCreditLabel}>
                   {t('codex_quota.reset_credit_number', { index: index + 1 })}
+                  {credit.labelKey && <> / {t(credit.labelKey)}</>}
                 </span>
                 <span className={classes.codexResetCreditTime}>
                   {expiresDisplay && (

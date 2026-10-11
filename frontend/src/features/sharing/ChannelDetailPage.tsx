@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -18,8 +18,8 @@ import { BaseProviderForm } from '@/features/providers/sheets/forms/BaseProvider
 import type { ProviderEntryFormInput, ProviderResource } from '@/features/providers/types';
 import type { AuthFilesResponse } from '@/types/authFile';
 import type { BoardMessage, Channel } from './types';
-import { LoadState, PageHeader } from './shared';
-import { date, useSharingActions, useSharingData } from './hooks';
+import { DailyTrend, LoadState, PageHeader } from './shared';
+import { date, number, useSharingActions, useSharingData } from './hooks';
 import { useChannelStore } from './useChannelStore';
 import styles from './Sharing.module.scss';
 
@@ -58,7 +58,6 @@ function ChannelCredentialCard({
       </div>
       <AuthFileCard
         file={file}
-        displayName={file.channel?.trim() || undefined}
         compact={false}
         selected={false}
         resolvedTheme={resolvedTheme}
@@ -596,10 +595,116 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
   );
 }
 
+type DetailTab = 'overview' | 'resources' | 'board' | 'manage';
+
+function resolveTab(value: string | null, canManage: boolean): DetailTab {
+  if (value === 'resources' || value === 'board') return value;
+  if (value === 'manage' && canManage) return 'manage';
+  return 'overview';
+}
+
+function ManagePanel({
+  channel,
+  isOwner,
+  mountedCount,
+  refresh,
+}: {
+  channel: Channel;
+  isOwner: boolean;
+  mountedCount: number;
+  refresh: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { run, confirm } = useSharingActions(refresh);
+  const [saving, setSaving] = useState(false);
+
+  const togglePublic = (value: boolean) =>
+    void run(async () => {
+      setSaving(true);
+      try {
+        await sharingApi.updateChannel(channel.id, { public: value });
+        await useChannelStore.getState().load();
+      } finally {
+        setSaving(false);
+      }
+    });
+
+  const remove = () =>
+    confirm(t('sharing.delete_channel_confirm', { name: channel.slug }), async () => {
+      await sharingApi.deleteChannel(channel.id);
+      await useChannelStore.getState().load();
+      navigate('/channels');
+    });
+
+  return (
+    <>
+      <Card title={t('sharing.edit_channel')}>
+        <p className={styles.meta}>{t('sharing.manage_hint')}</p>
+        <dl className={styles.fieldGrid}>
+          <div className={styles.field}>
+            <dt>{t('sharing.channel_slug')}</dt>
+            <dd className={styles.mono}>{channel.slug}</dd>
+          </div>
+          <div className={styles.field}>
+            <dt>{t('sharing.visibility_label')}</dt>
+            <dd>
+              <ToggleSwitch
+                ariaLabel={t('sharing.public_channel')}
+                checked={channel.public}
+                disabled={!isOwner || saving}
+                onChange={togglePublic}
+              />
+            </dd>
+          </div>
+        </dl>
+        <p className={styles.meta}>{t('sharing.public_channel_hint')}</p>
+      </Card>
+      <Card title={t('sharing.publish_status')}>
+        <p className={styles.meta}>{t('sharing.publish_hint')}</p>
+        <div className={styles.actions}>
+          <span
+            className={`${styles.status} ${channel.published ? styles.active : styles.inactive}`}
+          >
+            <span className={styles.statusDot} aria-hidden="true" />
+            {t(channel.published ? 'sharing.published' : 'sharing.withdrawn')}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              confirm(t('sharing.publish_confirm'), () =>
+                sharingApi.updateChannel(channel.id, { published: !channel.published })
+              )
+            }
+          >
+            {t(channel.published ? 'sharing.withdraw' : 'sharing.publish')}
+          </Button>
+        </div>
+      </Card>
+      {isOwner && (
+        <Card title={t('sharing.danger_zone')}>
+          <p className={styles.meta}>{t('sharing.delete_channel_hint')}</p>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={remove}
+            disabled={mountedCount > 0}
+            title={mountedCount > 0 ? t('sharing.delete_channel_blocked') : undefined}
+          >
+            {t('common.delete')}
+          </Button>
+        </Card>
+      )}
+    </>
+  );
+}
+
 export function ChannelDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const account = useAuthStore((state) => state.account);
+  const [params, setParams] = useSearchParams();
   const [providerForm, setProviderForm] = useState<{
     open: boolean;
     provider: SharedCredential | null;
@@ -607,11 +712,12 @@ export function ChannelDetailPage() {
 
   const { data, loading, error, refresh } = useSharingData(
     useCallback(async () => {
-      const [channels, rawCredentials] = await Promise.all([
+      const [channels, rawCredentials, stats] = await Promise.all([
         sharingApi.channels(),
         apiClient.get<{ credentials: SharedCredential[] }>(sharingPath('/credentials'), {
           params: { channel_id: id },
         }),
+        sharingApi.summary({ channel_id: id ?? '' }),
       ]);
       // AuthFileCard consumes normalized items (cooldownSnapshot, authIndex,
       // recentRequests); reuse the auth-files normalizer on the raw hub payload.
@@ -621,6 +727,7 @@ export function ChannelDetailPage() {
       return {
         channels: channels.channels,
         credentials: normalized.files as unknown as SharedCredential[],
+        stats,
       };
     }, [id])
   );
@@ -628,9 +735,31 @@ export function ChannelDetailPage() {
   const channel = data?.channels.find((item) => item.id === id);
   const credentials = (data?.credentials ?? []).filter((file) => file.kind !== 'provider');
   const providers = (data?.credentials ?? []).filter((file) => file.kind === 'provider');
-  const canManage =
-    !!channel &&
-    (channel.owner === account?.username || account?.role === 'admin' || !!channel.public);
+  const isOwner =
+    !!channel && (channel.owner === account?.username || account?.role === 'admin');
+  const canManage = isOwner || !!channel?.public;
+
+  const tab = resolveTab(params.get('tab'), canManage);
+  const setTab = (next: DetailTab) => {
+    const updated = new URLSearchParams(params);
+    if (next === 'overview') updated.delete('tab');
+    else updated.set('tab', next);
+    setParams(updated, { replace: true });
+  };
+
+  const callableModels = useMemo(() => {
+    const names = new Set<string>();
+    (data?.credentials ?? []).forEach((file) =>
+      (file.models ?? []).forEach((model) => names.add(model))
+    );
+    return names.size;
+  }, [data]);
+
+  const statsTotal = data?.stats.total;
+  const failureRate =
+    statsTotal && statsTotal.executions > 0
+      ? ((statsTotal.failures / statsTotal.executions) * 100).toFixed(1)
+      : null;
 
   if (!loading && !channel) {
     return (
@@ -641,6 +770,12 @@ export function ChannelDetailPage() {
       </div>
     );
   }
+  const tabs: { key: DetailTab; label: string }[] = [
+    { key: 'overview', label: t('sharing.tab_overview') },
+    { key: 'resources', label: t('sharing.tab_resources') },
+    { key: 'board', label: t('sharing.board') },
+    ...(canManage ? [{ key: 'manage' as const, label: t('sharing.manage_tab') }] : []),
+  ];
   return (
     <div className={styles.page}>
       <PageHeader
@@ -655,9 +790,6 @@ export function ChannelDetailPage() {
               {channel.public && (
                 <span className={styles.badge}>{t('sharing.public_channel')}</span>
               )}
-              <Link to={'/usage?channel_id=' + channel.id} className="btn btn-secondary btn-sm">
-                {t('sharing.view_usage')}
-              </Link>
             </>
           )
         }
@@ -665,62 +797,162 @@ export function ChannelDetailPage() {
       <LoadState loading={loading} error={error} />
       {channel && (
         <>
-          <div className={styles.detailLayout}>
-            <div className={styles.detailMain}>
-              <AnnouncementCard channel={channel} canManage={canManage} refresh={refresh} />
-              <section className={styles.detailSection}>
-                <div className={styles.sectionHead}>
-                  <h2>{t('sharing.credentials_section')}</h2>
-                  {canManage && (
+          <div className={styles.segmented} role="tablist" aria-label={channel.slug}>
+            {tabs.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.key}
+                className={`${styles.segmentedItem} ${tab === item.key ? styles.active : ''}`}
+                onClick={() => setTab(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className={styles.tabContent} key={tab}>
+            {tab === 'overview' && (
+              <>
+                <AnnouncementCard channel={channel} canManage={canManage} refresh={refresh} />
+                <Card
+                  title={t('sharing.channel_stats')}
+                  extra={
                     <Link
-                      to="/oauth"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => useChannelStore.getState().select(channel.id)}
+                      to={'/usage?channel_id=' + channel.id}
+                      className="btn btn-secondary btn-sm"
                     >
-                      {t('nav.oauth')}
+                      {t('sharing.view_usage')}
                     </Link>
-                  )}
-                </div>
-                {credentials.length === 0 ? (
-                  <EmptyState title={t('sharing.no_credentials')} />
-                ) : (
-                  <div className={styles.grid}>
-                    {credentials.map((file) => (
-                      <ChannelCredentialCard key={file.id} file={file} refresh={refresh} />
-                    ))}
+                  }
+                >
+                  <div className={styles.statsStack}>
+                    <div className={styles.statCards}>
+                      <div className={styles.statCard}>
+                        <span className={styles.statLabel}>{t('sharing.routed_calls')}</span>
+                        <strong className={styles.statValue}>
+                          {number(statsTotal?.calls ?? 0)}
+                        </strong>
+                        <span className={styles.statHint}>
+                          {failureRate !== null
+                            ? t('sharing.hint_failures', { rate: failureRate })
+                            : t('sharing.hint_requests')}
+                        </span>
+                      </div>
+                      <div className={styles.statCard}>
+                        <span className={styles.statLabel}>{t('sharing.total_tokens')}</span>
+                        <strong className={styles.statValue}>
+                          {number(statsTotal?.total_tokens ?? 0)}
+                        </strong>
+                        <span className={styles.statHint}>
+                          {t('sharing.hint_tokens_io', {
+                            input: number(statsTotal?.input_tokens ?? 0),
+                            output: number(statsTotal?.output_tokens ?? 0),
+                          })}
+                        </span>
+                      </div>
+                      <div className={styles.statCard}>
+                        <span className={styles.statLabel}>{t('sharing.callable_models')}</span>
+                        <strong className={styles.statValue}>{number(callableModels)}</strong>
+                        <span className={styles.statHint}>
+                          {t('sharing.resources_summary', {
+                            credentials: credentials.length,
+                            providers: providers.length,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <DailyTrend groups={data?.stats.groups ?? []} maxDays={14} />
                   </div>
-                )}
-              </section>
-              <section className={styles.detailSection}>
-                <div className={styles.sectionHead}>
-                  <h2>{t('sharing.providers_section')}</h2>
-                  {canManage && (
-                    <Button
-                      size="sm"
-                      onClick={() => setProviderForm({ open: true, provider: null })}
-                    >
-                      {t('sharing.add_provider')}
-                    </Button>
-                  )}
-                </div>
-                {providers.length === 0 ? (
-                  <EmptyState title={t('sharing.no_providers')} />
-                ) : (
-                  <div className={styles.grid}>
-                    {providers.map((provider) => (
-                      <ChannelProviderCard
-                        key={provider.id}
-                        provider={provider}
-                        channel={channel}
-                        refresh={refresh}
-                        onEdit={() => setProviderForm({ open: true, provider })}
-                      />
-                    ))}
+                </Card>
+                <Card title={t('sharing.channel_info')}>
+                  <dl className={styles.fieldGrid}>
+                    <div className={styles.field}>
+                      <dt>{t('sharing.owner_label')}</dt>
+                      <dd>{channel.owner}</dd>
+                    </div>
+                    <div className={styles.field}>
+                      <dt>{t('sharing.prefix_label')}</dt>
+                      <dd className={styles.mono}>{channel.prefix}</dd>
+                    </div>
+                    <div className={styles.field}>
+                      <dt>{t('sharing.visibility_label')}</dt>
+                      <dd>
+                        {t(channel.public ? 'sharing.public_channel' : 'sharing.private_channel')}
+                      </dd>
+                    </div>
+                    <div className={styles.field}>
+                      <dt>{t('sharing.created_at_label')}</dt>
+                      <dd>{date(channel.created_at)}</dd>
+                    </div>
+                  </dl>
+                </Card>
+              </>
+            )}
+            {tab === 'resources' && (
+              <>
+                <section className={styles.detailSection}>
+                  <div className={styles.sectionHead}>
+                    <h2>{t('sharing.credentials_section')}</h2>
+                    {canManage && (
+                      <Link
+                        to="/oauth"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => useChannelStore.getState().select(channel.id)}
+                      >
+                        {t('nav.oauth')}
+                      </Link>
+                    )}
                   </div>
-                )}
-              </section>
-            </div>
-            <BoardPanel channel={channel} canModerate={canManage} />
+                  {credentials.length === 0 ? (
+                    <EmptyState title={t('sharing.no_credentials')} />
+                  ) : (
+                    <div className={styles.grid}>
+                      {credentials.map((file) => (
+                        <ChannelCredentialCard key={file.id} file={file} refresh={refresh} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+                <section className={styles.detailSection}>
+                  <div className={styles.sectionHead}>
+                    <h2>{t('sharing.providers_section')}</h2>
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        onClick={() => setProviderForm({ open: true, provider: null })}
+                      >
+                        {t('sharing.add_provider')}
+                      </Button>
+                    )}
+                  </div>
+                  {providers.length === 0 ? (
+                    <EmptyState title={t('sharing.no_providers')} />
+                  ) : (
+                    <div className={styles.grid}>
+                      {providers.map((provider) => (
+                        <ChannelProviderCard
+                          key={provider.id}
+                          provider={provider}
+                          channel={channel}
+                          refresh={refresh}
+                          onEdit={() => setProviderForm({ open: true, provider })}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+            {tab === 'board' && <BoardPanel channel={channel} canModerate={canManage} />}
+            {tab === 'manage' && (
+              <ManagePanel
+                channel={channel}
+                isOwner={isOwner}
+                mountedCount={data?.credentials.length ?? 0}
+                refresh={refresh}
+              />
+            )}
           </div>
           {providerForm.open && (
             <ChannelProviderFormModal

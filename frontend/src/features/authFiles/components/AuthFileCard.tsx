@@ -39,9 +39,6 @@ import { useAuthStore } from '@/stores';
 
 export type AuthFileCardProps = {
   file: AuthFileItem;
-  /** Display-only name override (e.g. the channel-pinned prefix in sharing
-   * pages); callbacks and lookups still use the real file.name. */
-  displayName?: string;
   compact: boolean;
   selected: boolean;
   resolvedTheme: ResolvedTheme;
@@ -70,7 +67,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const manageable = !account || props.file.manageable === true;
   const {
     file,
-    displayName,
     compact,
     selected,
     resolvedTheme,
@@ -122,8 +118,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const priorityValue = Number.isSafeInteger(file.priority) ? file.priority : undefined;
   const weightValue = Number.isSafeInteger(file.weight) ? file.weight : undefined;
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
-  // 主行显示账号（email/项目 ID），文件名降为满卡宽的 mono 副行
-  const identity = deriveAuthFileIdentity(displayName ? { ...file, name: displayName } : file);
+  // 主行显示账号（email/项目 ID）或渠道钉住前缀，文件名降为满卡宽的 mono 副行
+  const identity = deriveAuthFileIdentity(file);
 
   // 挂载时捕获一次入场延迟：父级随后传 null 也不会中断已开始的动画
   const [mountEntranceDelayMs] = useState<number | null>(entranceDelayMs ?? null);
@@ -165,7 +161,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
             {typeLabel}
           </span>
           <span
-            className={`${styles.account} ${identity.kind === 'fileName' ? styles.accountMono : ''}`}
+            className={`${styles.account} ${identity.kind === 'fileName' || identity.kind === 'pinned' ? styles.accountMono : ''}`}
             title={identity.primary}
           >
             {identity.primary}

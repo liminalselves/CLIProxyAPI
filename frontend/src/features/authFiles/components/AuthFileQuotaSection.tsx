@@ -14,9 +14,13 @@ import { Button } from '@/components/ui/Button';
 import { IconRefreshCw } from '@/components/ui/icons';
 import { bindQuotaClasses } from '@/features/quota/types';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '@/features/quota/providers';
+import {
+  buildQuotaResetConfirmation,
+  quotaResetParams,
+} from '@/features/quota/quotaResetConfirmation';
 import styles from './AuthFileQuota.module.scss';
 
-/** 认证文件卡片外衣：紧凑额度样式绑定成类型化契约（缺键在模块初始化即抛）。 */
+/** Compact cards must satisfy the same quota style contract as the quota page. */
 const compactQuotaClasses = bindQuotaClasses(styles, 'AuthFileQuota.module.scss');
 
 const assertNever = (value: never): never => {
@@ -49,6 +53,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'codex') return state.codexQuota[cacheKey] as QuotaCardState | undefined;
     if (quotaType === 'devin') return state.devinQuota[cacheKey] as QuotaCardState | undefined;
     if (quotaType === 'kimi') return state.kimiQuota[cacheKey] as QuotaCardState | undefined;
+    if (quotaType === 'zcode') return state.zcodeQuota[cacheKey] as QuotaCardState | undefined;
     if (quotaType === 'meta') return state.metaQuota[cacheKey] as QuotaCardState | undefined;
     if (quotaType === 'xai') return state.xaiQuota[cacheKey] as QuotaCardState | undefined;
     return assertNever(quotaType);
@@ -116,27 +121,29 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     const resetQuota = adapter.resetQuota;
     if (!resetQuota) return;
 
+    const confirmation = buildQuotaResetConfirmation(adapter, quota, file, t);
+    const params = quotaResetParams(adapter, file);
     showConfirmation({
-      title: t('codex_quota.reset_confirm_title'),
-      message: t('codex_quota.reset_confirm_message', { name: file.name }),
+      title: t('codex_quota.reset_confirm_title', params),
+      message: confirmation.message,
       confirmText: t('codex_quota.reset_confirm_button'),
       variant: 'primary',
       onConfirm: async () => {
         const cacheGeneration = captureQuotaCacheGeneration(file.name);
         setResettingQuota(true);
         try {
-          const data = await resetQuota(file, t);
+          const data = await resetQuota(file, t, confirmation.getOption());
           commitIfQuotaCacheCurrent(cacheGeneration, () => {
             updateQuotaState((prev) => ({
               ...prev,
               [cacheKey]: adapter.buildSuccessState(data),
             }));
-            showNotification(t('codex_quota.reset_success', { name: file.name }), 'success');
+            showNotification(t('codex_quota.reset_success', params), 'success');
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : t('common.unknown_error');
           commitIfQuotaCacheCurrent(cacheGeneration, () => {
-            showNotification(t('codex_quota.reset_failed', { name: file.name, message }), 'error');
+            showNotification(t('codex_quota.reset_failed', { ...params, message }), 'error');
           });
         } finally {
           setResettingQuota(false);
@@ -148,7 +155,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     cacheKey,
     disableControls,
     file,
-    quota?.status,
+    quota,
     resettingQuota,
     showConfirmation,
     showNotification,

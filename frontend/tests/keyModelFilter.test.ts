@@ -1,0 +1,56 @@
+import { describe, expect, spyOn, test } from 'bun:test';
+import { apiClient } from '../src/services/api/client';
+import { sharingApi } from '../src/services/api/sharing';
+import { normalizeKeyBlockedModels } from '../src/features/sharing/keyFilters';
+
+describe('key model filter', () => {
+  test('normalizes legacy keys without a filter list to an empty array', async () => {
+    const key = {
+      id: 'k1',
+      owner: 'alice',
+      name: 'phone',
+      hint: 'sk-...1234',
+      auto_balance: true,
+      disabled: false,
+      created_at: '2026-10-10T00:00:00Z',
+    };
+    const get = spyOn(apiClient, 'get').mockResolvedValue({
+      keys: [
+        { ...key, blocked_models: null },
+        { ...key, id: 'k2' },
+      ],
+    });
+    try {
+      const response = await sharingApi.keys();
+      expect(get).toHaveBeenCalledWith('/v8/hub/keys');
+      expect(response.keys.map((entry) => entry.blocked_models)).toEqual([[], []]);
+    } finally {
+      get.mockRestore();
+    }
+  });
+
+  test('sends the blocked model list verbatim when updating a key', async () => {
+    const patch = spyOn(apiClient, 'patch').mockResolvedValue({});
+    try {
+      await sharingApi.updateKey('k1', { blocked_models: ['deepseek', '123/gpt-5'] });
+      expect(patch).toHaveBeenCalledWith('/v8/hub/keys/k1', {
+        blocked_models: ['deepseek', '123/gpt-5'],
+      });
+      await sharingApi.updateKey('k1', { blocked_models: [] });
+      expect(patch).toHaveBeenCalledWith('/v8/hub/keys/k1', { blocked_models: [] });
+    } finally {
+      patch.mockRestore();
+    }
+  });
+
+  test('normalizeKeyBlockedModels trims, dedupes, and drops routes covered by a bare block', () => {
+    expect(normalizeKeyBlockedModels([])).toEqual([]);
+    expect(normalizeKeyBlockedModels([' deepseek ', '', 'deepseek'])).toEqual(['deepseek']);
+    // A bare model block already covers every pinned route of that model.
+    expect(normalizeKeyBlockedModels(['123/deepseek', 'deepseek', '564/deepseek'])).toEqual([
+      'deepseek',
+    ]);
+    // Routes of other models and unmatched pinned routes stay.
+    expect(normalizeKeyBlockedModels(['123/deepseek', 'gpt-5'])).toEqual(['123/deepseek', 'gpt-5']);
+  });
+});

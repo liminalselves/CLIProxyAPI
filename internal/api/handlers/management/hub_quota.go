@@ -37,6 +37,10 @@ var hubQuotaRoutes = map[string][]hubQuotaRoute{
 	"codex": {
 		{host: "chatgpt.com", prefixes: []string{"/backend-api/wham/", "/backend-api/subscriptions"}},
 	},
+	"zcode": {
+		{host: "bigmodel.cn", prefixes: []string{"/api/monitor/usage/quota/limit"}},
+		{host: "zcode.z.ai", prefixes: []string{"/api/v1/coding-plan/reset/status", "/api/v1/coding-plan/reset/use"}},
+	},
 	"kimi": {
 		{host: "api.kimi.com", prefixes: []string{"/coding/v1/usages"}},
 		{host: "api.kimi.ai", prefixes: []string{"/coding/v1/usages"}},
@@ -64,7 +68,7 @@ func hubQuotaRouteAllowed(provider, host, path string) bool {
 			continue
 		}
 		for _, prefix := range route.prefixes {
-			if strings.HasPrefix(path, prefix) {
+			if path == prefix || !strings.EqualFold(strings.TrimSpace(provider), "zcode") && strings.HasPrefix(path, prefix) {
 				return true
 			}
 		}
@@ -186,6 +190,10 @@ func (h *Handler) HubQuotaAPICall(c *gin.Context) {
 	}
 	if hostOverride != "" {
 		req.Host = hostOverride
+	}
+	if errAuth := applyZCodeResetAuthorization(a, req); errAuth != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errAuth.Error()})
+		return
 	}
 
 	httpClient := &http.Client{Timeout: defaultAPICallTimeout}

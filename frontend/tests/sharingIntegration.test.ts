@@ -7,7 +7,7 @@ import { I18nextProvider } from 'react-i18next';
 import english from '../src/i18n/locales/en.json';
 import { AccountLoginForm } from '../src/features/sharing/AccountLoginForm';
 import { AccountPage } from '../src/features/sharing/AccountPage';
-import { RequestStatus, UsageLogRow } from '../src/features/sharing/UsagePage';
+import { RequestStatus, UsageLogRow, cacheHitRate } from '../src/features/sharing/UsagePage';
 import { obfuscatedStorage } from '../src/services/storage/secureStorage';
 import { readFileSync } from 'node:fs';
 import { apiClient } from '../src/services/api/client';
@@ -260,12 +260,12 @@ describe('official frontend account integration', () => {
     expect(markup).toContain('（bob-kimi/kimi-k3）');
     expect(markup).toContain('phone');
     expect(markup).toContain('bob-kimi');
-    expect(markup).toContain('49.0s');
+    expect(markup).toContain('Total 49.0s');
     expect(markup).toContain('41 t/s');
     expect(markup).toContain('4,364 / 2,000');
-    expect(markup).toContain('Total 6,364');
+    expect(markup).not.toContain('Total 6,364');
     expect(markup).toContain('Stream');
-    expect(markup).toContain('Time to first token 1.2s');
+    expect(markup).toContain('TTFT 1.2s');
     expect(markup).not.toContain('@alice');
     expect(markup).not.toContain('trace-1');
     expect(markup).not.toContain('kimi-k3-for-coding');
@@ -306,6 +306,58 @@ describe('official frontend account integration', () => {
     expect(interrupted).toContain('Request interrupted');
     expect(interrupted).toContain('499');
     expect(interrupted).not.toContain('Failed');
+  });
+
+  test('usage log row annotates cache and reasoning as subsets of input and output', () => {
+    const wrap = (element: ReturnType<typeof createElement>) =>
+      render(createElement('table', null, createElement('tbody', null, element)));
+    const markup = wrap(
+      createElement(UsageLogRow, {
+        entry: {
+          id: 'u2',
+          request_id: 'req-2',
+          trace_id: 'trace-2',
+          at: '2026-10-10T00:05:27Z',
+          consumer: 'alice',
+          key_id: 'k1',
+          key_name: 'phone',
+          owner: 'bob',
+          channel_id: 'ch1',
+          channel: 'bob-kimi',
+          credential_id: 'c1',
+          credential_name: 'bob-kimi-codex#1-internal.json',
+          provider: 'codex',
+          model: 'bob-kimi/kimi-k3',
+          upstream_model: 'kimi-k3',
+          endpoint: 'POST /v1/chat/completions',
+          stream: false,
+          failed: false,
+          status: 200,
+          latency_ms: 12000,
+          ttft_ms: 800,
+          input_tokens: 41437,
+          output_tokens: 237,
+          reasoning_tokens: 153,
+          cache_read_tokens: 41216,
+          cache_creation_tokens: 0,
+          total_tokens: 41674,
+          tokens_known: true,
+          reasoning_effort: 'high',
+        },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    // Input/output stay the canonical totals, with cache and reasoning shown
+    // inline as bare-number subsets instead of inflating the totals.
+    expect(markup).toContain('41,437（41,216） / 237（153）');
+    expect(markup).not.toContain('Total 41,674');
+  });
+
+  test('cache hit rate is the cached share of total input', () => {
+    expect(cacheHitRate({ input_tokens: 41437, cache_read_tokens: 41216 })).toBeCloseTo(99.5, 1);
+    expect(cacheHitRate({ input_tokens: 100, cache_read_tokens: 0 })).toBeNull();
+    expect(cacheHitRate({ input_tokens: 0, cache_read_tokens: 50 })).toBeNull();
   });
 
   test('includes every sharing label in the existing four locale catalogs', () => {

@@ -4,7 +4,7 @@
 
 import type { TypeColorSet } from '@/types';
 
-// Theme colors for type badges — 与 authFiles/constants.ts 保持同步
+// Canonical provider badge colors, re-exported by authFiles/constants.ts.
 export const TYPE_COLORS: Record<string, TypeColorSet> = {
   qwen: {
     light: { bg: '#ede5fd', text: '#5530c7' },
@@ -33,6 +33,10 @@ export const TYPE_COLORS: Record<string, TypeColorSet> = {
   meta: {
     light: { bg: '#e3f2fd', text: '#1565c0' },
     dark: { bg: '#0d47a1', text: '#64b5f6' },
+  },
+  zcode: {
+    light: { bg: '#e3edff', text: '#1e4fa3' },
+    dark: { bg: '#1a315a', text: '#a2c4ff' },
   },
   kimi: {
     light: { bg: '#dce8ff', text: '#0560cf' },

@@ -47,10 +47,16 @@ type APIKey struct {
 	// AutoBalance lets the key call bare base model names; requests are spread
 	// evenly across every published credential serving that model, with
 	// failover to the remaining ones when an attempt fails.
-	AutoBalance bool       `json:"auto_balance"`
-	Disabled    bool       `json:"disabled"`
-	CreatedAt   time.Time  `json:"created_at"`
-	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	AutoBalance   bool       `json:"auto_balance"`
+	BlockedModels []string   `json:"blocked_models"`
+	Disabled      bool       `json:"disabled"`
+	CreatedAt     time.Time  `json:"created_at"`
+	RevokedAt     *time.Time `json:"revoked_at,omitempty"`
+}
+
+func (key APIKey) clone() APIKey {
+	key.BlockedModels = append([]string{}, key.BlockedModels...)
+	return key
 }
 
 type keyRecord struct {
@@ -425,7 +431,7 @@ func (s *Store) CreateKey(actor User, name string) (APIKey, string, error) {
 		d.Keys[id] = keyRecord{APIKey: key, Hash: hashToken(secret)}
 		return nil
 	})
-	return key, secret, err
+	return key.clone(), secret, err
 }
 
 func (s *Store) AuthenticateKey(secret string) (User, APIKey, bool) {
@@ -437,7 +443,7 @@ func (s *Store) AuthenticateKey(secret string) (User, APIKey, bool) {
 			continue
 		}
 		u, ok := s.data.Users[key.Owner]
-		return u.User, key.APIKey, ok && !u.Disabled
+		return u.User, key.APIKey.clone(), ok && !u.Disabled
 	}
 	return User{}, APIKey{}, false
 }
@@ -448,14 +454,29 @@ func (s *Store) Keys(actor User) []APIKey {
 	out := make([]APIKey, 0)
 	for _, key := range s.data.Keys {
 		if key.Owner == actor.Username && key.RevokedAt == nil {
-			out = append(out, key.APIKey)
+			out = append(out, key.APIKey.clone())
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out
 }
 
-func (s *Store) UpdateKey(actor User, id string, name *string, disabled, autoBalance *bool, revoke bool) error {
+// KeysAll lists every member's active key, for building usage filters. It is
+// only exposed through the trimmed summary in the keys/all handler.
+func (s *Store) KeysAll() []APIKey {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]APIKey, 0, len(s.data.Keys))
+	for _, key := range s.data.Keys {
+		if key.RevokedAt == nil {
+			out = append(out, key.APIKey.clone())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *Store) UpdateKey(actor User, id string, name *string, disabled, autoBalance *bool, blockedModels *[]string, revoke bool) error {
 	return s.mutate(func(d *state) error {
 		key, ok := d.Keys[id]
 		if !ok || key.RevokedAt != nil {
@@ -476,6 +497,21 @@ func (s *Store) UpdateKey(actor User, id string, name *string, disabled, autoBal
 		}
 		if autoBalance != nil {
 			key.AutoBalance = *autoBalance
+		}
+		if blockedModels != nil {
+			models := make([]string, 0, len(*blockedModels))
+			seen := make(map[string]struct{}, len(*blockedModels))
+			for _, model := range *blockedModels {
+				model = strings.TrimSpace(model)
+				if model == "" {
+					return ErrInvalid
+				}
+				if _, exists := seen[model]; !exists {
+					seen[model] = struct{}{}
+					models = append(models, model)
+				}
+			}
+			key.BlockedModels = models
 		}
 		if revoke {
 			now := s.now().UTC()

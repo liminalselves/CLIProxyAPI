@@ -6,6 +6,7 @@ import {
   classifyQuotaFiles,
   filterEntriesByTab,
   filterEntriesBySearch,
+  getQuotaDisplayParts,
   isQuotaRefreshDisabled,
   paginate,
   resolveQuotaProviderType,
@@ -22,9 +23,9 @@ const FILES: AuthFileItem[] = [
   file('claude-a.json', 'claude'),
   file('kimi-a.json', 'kimi'),
   file('codex-b.json', 'codex'),
-  file('grok-a.json', 'grok'), // 别名归一到 xai
-  file('gemini-a.json', 'gemini'), // 不支持额度
-  file('claude-off.json', 'claude', { disabled: true }), // 停用
+  file('grok-a.json', 'grok'), // Alias of xai.
+  file('gemini-a.json', 'gemini'), // Quota is not supported.
+  file('claude-off.json', 'claude', { disabled: true }),
 ];
 
 describe('refresh-all list handoff', () => {
@@ -70,6 +71,7 @@ describe('buildTabCounts', () => {
       codex: 2,
       xai: 1,
       kimi: 1,
+      zcode: 0,
       devin: 0,
       meta: 0,
     });
@@ -249,5 +251,35 @@ describe('sortQuotaEntries', () => {
     const last = entries[entries.length - 1].file.name;
     const sorted = sortQuotaEntries(entries, 'soonest', resolver({ [last]: 1 }));
     expect(paginate(sorted, 1, 2).pageItems[0].file.name).toBe(last);
+  });
+});
+
+describe('getQuotaDisplayParts', () => {
+  test('keeps the plain file name for unpinned credentials', () => {
+    expect(getQuotaDisplayParts(file('kimi-a.json', 'kimi'))).toEqual({
+      primary: 'kimi-a.json',
+      secondary: null,
+      full: 'kimi-a.json',
+    });
+  });
+
+  test('splits pinned credentials into prefix title and name remainder subtitle', () => {
+    expect(
+      getQuotaDisplayParts(
+        file('123-kimi#1-kimi-1791347589910.json', 'kimi', { channel: '123-kimi#1' })
+      )
+    ).toEqual({
+      primary: '123-kimi#1',
+      secondary: 'kimi-1791347589910.json',
+      full: '123-kimi#1-kimi-1791347589910.json',
+    });
+  });
+
+  test('keeps the Devin multi-identity disambiguation behind the pinned prefix', () => {
+    const parts = getQuotaDisplayParts(
+      file('123-devin#1-devin-org.json', 'devin', { channel: '123-devin#1', authIndex: '7' })
+    );
+    expect(parts.primary).toBe('123-devin#1 · 7');
+    expect(parts.secondary).toBe('devin-org.json');
   });
 });

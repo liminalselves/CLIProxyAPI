@@ -58,6 +58,8 @@ type UsageEvent struct {
 	TotalTokens         int64                `json:"total_tokens"`
 	TokensKnown         bool                 `json:"tokens_known"`
 	TokenBreakdown      usage.TokenBreakdown `json:"token_breakdown"`
+	// ReasoningEffort is the translated upstream thinking level (low/high/…), when known.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 type CallEvent struct {
@@ -155,8 +157,9 @@ func (s *Store) HandleUsage(ctx context.Context, record usage.Record) {
 		LatencyMS: record.Latency.Milliseconds(), TTFTMS: record.TTFT.Milliseconds(),
 		InputTokens: d.InputTokens, OutputTokens: d.OutputTokens, ReasoningTokens: d.ReasoningTokens,
 		CacheReadTokens: d.CacheReadTokens, CacheCreationTokens: d.CacheCreationTokens, TotalTokens: d.TotalTokens,
-		TokensKnown:    d.TotalTokens != 0 || d.InputTokens != 0 || d.OutputTokens != 0,
-		TokenBreakdown: d.TokenBreakdown,
+		TokensKnown:     d.TotalTokens != 0 || d.InputTokens != 0 || d.OutputTokens != 0,
+		TokenBreakdown:  d.TokenBreakdown,
+		ReasoningEffort: record.ReasoningEffort,
 	}
 	if d.TokenBreakdown.Valid() && d.TokenBreakdown.Quality == usage.TokenAccountingQualityComplete {
 		b := d.TokenBreakdown
@@ -235,7 +238,41 @@ func matchUsage(event UsageEvent, filter Filter) bool {
 	return within(event.At, filter) && (filter.Consumer == "" || event.Consumer == filter.Consumer) &&
 		(filter.Owner == "" || event.Owner == filter.Owner) && (filter.ChannelID == "" || event.ChannelID == filter.ChannelID) &&
 		(filter.CredentialID == "" || event.CredentialID == filter.CredentialID) && (filter.KeyID == "" || event.KeyID == filter.KeyID) &&
-		(filter.Model == "" || strings.Contains(strings.ToLower(event.Model), strings.ToLower(filter.Model)))
+		matchModelQuery(event, filter.Model)
+}
+
+// Parenthesized channel/model suffixes pin bare-model calls to their serving
+// channel. Plain queries retain the existing requested-model substring match.
+func matchModelQuery(event UsageEvent, query string) bool {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return true
+	}
+	model := strings.ToLower(event.Model)
+	serving := model
+	if !strings.Contains(model, "/") && event.Channel != "" {
+		serving = strings.ToLower(event.Channel) + "/" + model
+	}
+	if pin, ok := modelQueryPin(q); ok {
+		return serving == pin || model == pin
+	}
+	return strings.Contains(model, q)
+}
+
+// modelQueryPin extracts a "channel/model" pin from a trailing parenthesized
+// segment of the query, accepting both ASCII and full-width parentheses.
+func modelQueryPin(q string) (string, bool) {
+	for _, pair := range [][2]string{{"(", ")"}, {"（", "）"}} {
+		open := strings.Index(q, pair[0])
+		if open < 0 || !strings.HasSuffix(q, pair[1]) {
+			continue
+		}
+		inner := strings.TrimSpace(q[open+len(pair[0]) : len(q)-len(pair[1])])
+		if strings.Contains(inner, "/") {
+			return inner, true
+		}
+	}
+	return "", false
 }
 
 func pageBounds(filter Filter, length int) (int, int) {

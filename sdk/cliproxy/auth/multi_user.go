@@ -51,6 +51,56 @@ func (a *Auth) ChannelModelEnabled(model string) bool {
 	return false
 }
 
+type blockedModelsContextKey struct{}
+type modelBlocklist map[string]struct{}
+
+// WithBlockedModels attaches the key's model exclusions to this request.
+func WithBlockedModels(ctx context.Context, models []string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	blocked := make(modelBlocklist, len(models))
+	for _, model := range models {
+		if model = canonicalModelKey(model); model != "" {
+			blocked[model] = struct{}{}
+		}
+	}
+	return context.WithValue(ctx, blockedModelsContextKey{}, blocked)
+}
+
+func blockedModelsFromContext(ctx context.Context) modelBlocklist {
+	if ctx == nil {
+		return nil
+	}
+	blocked, _ := ctx.Value(blockedModelsContextKey{}).(modelBlocklist)
+	return blocked
+}
+
+// WithModelRestrictionsFromContext preserves the key policy when handlers replace the request context.
+func WithModelRestrictionsFromContext(ctx, source context.Context) context.Context {
+	if blocked := blockedModelsFromContext(source); blocked != nil {
+		return context.WithValue(ctx, blockedModelsContextKey{}, blocked)
+	}
+	return ctx
+}
+
+func (blocked modelBlocklist) blocks(model string) bool {
+	model = canonicalModelKey(model)
+	if _, exists := blocked[model]; exists {
+		return true
+	}
+	if _, base, pinned := strings.Cut(model, "/"); pinned {
+		_, exists := blocked[base]
+		return exists
+	}
+	return false
+}
+
+// ModelBlocked matches either a pinned route or a base name excluded across all channels.
+func ModelBlocked(ctx context.Context, model string) bool {
+	return blockedModelsFromContext(ctx).blocks(model)
+}
+
 type bareModelsContextKey struct{}
 
 // WithBareModelsAllowed marks a request as permitted to call bare base model

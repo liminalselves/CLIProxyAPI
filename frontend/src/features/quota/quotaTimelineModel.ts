@@ -276,6 +276,7 @@ interface WindowLike {
 }
 
 interface ResetCreditLike {
+  resetType?: 'FIVE_HOUR' | 'WEEK';
   id?: string;
   status?: string;
   grantedAt?: string;
@@ -357,9 +358,11 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
 
   if (!quota || quota.status !== 'success') return empty;
 
-  if (provider === 'claude' || provider === 'codex') {
+  if (provider === 'claude' || provider === 'codex' || provider === 'zcode') {
     const windows = ((quota as { windows?: WindowLike[] }).windows ?? []).filter(
-      (window) => typeof window.resetAtMs === 'number'
+      (window) =>
+        typeof window.resetAtMs === 'number' &&
+        (provider !== 'zcode' || (window.periodHours ?? 0) > 0)
     );
     const preferredCodexId =
       maxPeriodHours !== undefined && maxPeriodHours <= SESSION_PERIOD_HOURS
@@ -383,9 +386,14 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
     if (!chosen) return empty;
 
     const resetCredits =
-      provider === 'codex'
+      provider === 'codex' || provider === 'zcode'
         ? ((quota as { rateLimitResetCredits?: ResetCreditLike[] }).rateLimitResetCredits ?? [])
-            .filter((credit) => credit.status === 'available')
+            .filter(
+              (credit) =>
+                credit.status === 'available' &&
+                (provider === 'codex' ||
+                  credit.resetType === (chosen.periodHours === 5 ? 'FIVE_HOUR' : 'WEEK'))
+            )
             .map((credit): TimelineResetCredit | null => {
               const expiresAtMs = new Date(credit.expiresAt ?? '').getTime();
               if (!Number.isFinite(expiresAtMs)) return null;
@@ -404,7 +412,7 @@ export function buildTimelineLane(input: TimelineLaneInput): TimelineLane {
       ...empty,
       anchorMs: chosen.resetAtMs ?? null,
       periodHours: chosen.periodHours ?? null,
-      // Claude and Codex store percent USED.
+      // These providers report used capacity.
       remaining:
         typeof chosen.usedPercent === 'number' ? clampPercent(100 - chosen.usedPercent) : null,
       limits: windows

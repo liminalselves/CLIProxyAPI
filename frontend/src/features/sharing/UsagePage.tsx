@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { Sheet } from '@/components/ui/Sheet';
 import { useAuthStore } from '@/stores';
 import { sharingApi } from '@/services/api/sharing';
+import { formatCompactNumber } from '@/utils/format';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   Table,
@@ -19,9 +20,15 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/Table';
-import type { Channel, PersonalKey, UsageEntry } from './types';
+import type { Account, Channel, PersonalKey, SharedKeyRef, UsageEntry } from './types';
 import { DailyTrend, LoadState, PageHeader, Pager } from './shared';
 import { date, duration, number, useSharingData } from './hooks';
+import {
+  buildModelCandidateQuery,
+  resolveUsageKey,
+  resolveUsageModel,
+  type UsageKeyOption,
+} from './usageFilters';
 import styles from './Sharing.module.scss';
 
 type UsageScope = 'mine' | 'contributed' | 'site';
@@ -81,6 +88,14 @@ const tokensPerSecond = (entry: UsageEntry) =>
     ? Math.round(entry.output_tokens / (entry.latency_ms / 1000))
     : null;
 
+// Cache hit rate: the share of total input tokens served from the upstream cache.
+export const cacheHitRate = (
+  entry: Pick<UsageEntry, 'input_tokens' | 'cache_read_tokens'>
+): number | null =>
+  entry.input_tokens > 0 && entry.cache_read_tokens > 0
+    ? (entry.cache_read_tokens / entry.input_tokens) * 100
+    : null;
+
 const statusKind = (status: number, failed: boolean): 'ok' | 'fail' | 'interrupted' =>
   status === 499 ? 'interrupted' : failed || status >= 400 ? 'fail' : 'ok';
 
@@ -130,11 +145,10 @@ function UsageDetailSheet({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const tokenParts = entry
+  // Canonical accounting: cache buckets are subsets of input, reasoning is a
+  // subset of output; the total is input + output with no double counting.
+  const inputParts = entry
     ? [
-        entry.reasoning_tokens > 0
-          ? t('sharing.token_reasoning', { count: number(entry.reasoning_tokens) })
-          : '',
         entry.cache_read_tokens > 0
           ? t('sharing.token_cache', { count: number(entry.cache_read_tokens) })
           : '',
@@ -143,6 +157,8 @@ function UsageDetailSheet({
           : '',
       ].filter(Boolean)
     : [];
+  const cacheRate = entry ? cacheHitRate(entry) : null;
+  const rate = entry ? tokensPerSecond(entry) : null;
   return (
     <Sheet
       open={!!entry}
@@ -196,18 +212,35 @@ function UsageDetailSheet({
             {entry.tokens_known ? (
               <>
                 <div>
-                  {t('sharing.token_input')} {number(entry.input_tokens)} ·{' '}
-                  {t('sharing.token_output')} {number(entry.output_tokens)} ·{' '}
-                  {t('sharing.token_total')} {number(entry.total_tokens)}
+                  {t('sharing.token_input')} {number(entry.input_tokens)}
+                  {inputParts.length > 0 && (
+                    <span className={styles.cellSecondary}>（{inputParts.join(' · ')}）</span>
+                  )}
                 </div>
-                {tokenParts.length > 0 && (
-                  <div className={styles.cellSecondary}>{tokenParts.join(' · ')}</div>
-                )}
+                <div>
+                  {t('sharing.token_output')} {number(entry.output_tokens)}
+                  {entry.reasoning_tokens > 0 && (
+                    <span className={styles.cellSecondary}>
+                      （{t('sharing.token_reasoning', { count: number(entry.reasoning_tokens) })}）
+                    </span>
+                  )}
+                </div>
               </>
             ) : (
               t('sharing.unknown')
             )}
           </Field>
+          {cacheRate !== null && (
+            <Field label={t('sharing.field_cache_hit')}>{cacheRate.toFixed(1)}%</Field>
+          )}
+          {entry.reasoning_effort && (
+            <Field label={t('sharing.field_reasoning_effort')}>
+              <span className={styles.mono}>{entry.reasoning_effort}</span>
+            </Field>
+          )}
+          {rate !== null && (
+            <Field label={t('sharing.field_generation_speed')}>{rate} t/s</Field>
+          )}
           {entry.trace_id && (
             <Field label={t('sharing.field_trace')}>
               <span className={styles.mono}>{entry.trace_id}</span>
@@ -294,26 +327,27 @@ export function UsageLogRow({
       </TableCell>
       <TableCell>
         {entry.tokens_known ? (
-          <>
-            <div className={`${styles.cellPrimary} ${styles.mono}`}>
-              {number(entry.input_tokens)} / {number(entry.output_tokens)}
-            </div>
-            <div className={styles.cellSecondary}>
-              {t('sharing.token_total')} {number(entry.total_tokens)}
-            </div>
-          </>
+          <div className={`${styles.cellPrimary} ${styles.mono}`}>
+            {`${number(entry.input_tokens)}${
+              entry.cache_read_tokens > 0 ? `（${number(entry.cache_read_tokens)}）` : ''
+            } / ${number(entry.output_tokens)}${
+              entry.reasoning_tokens > 0 ? `（${number(entry.reasoning_tokens)}）` : ''
+            }`}
+          </div>
         ) : (
           <span className={styles.cellSecondary}>{t('sharing.unknown')}</span>
         )}
       </TableCell>
       <TableCell>
         <div className={`${styles.latency} ${latencyClass}`}>
-          <div className={styles.cellPrimary}>{duration(entry.latency_ms)}</div>
           {entry.ttft_ms > 0 && (
-            <div className={styles.cellSecondary}>
-              {t('sharing.field_ttft')} {duration(entry.ttft_ms)}
+            <div>
+              {t('sharing.latency_ttft_short')} {duration(entry.ttft_ms)}
             </div>
           )}
+          <div>
+            {t('sharing.latency_total_short')} {duration(entry.latency_ms)}
+          </div>
         </div>
       </TableCell>
     </TableRow>
@@ -341,9 +375,6 @@ function UsageLogCard({
             <span className={styles.cellSecondary}>（{servingModelId(entry)}）</span>
           )}
         </span>
-        <span className={styles.cellPrimary}>
-          {entry.tokens_known ? number(entry.total_tokens) : '—'}
-        </span>
       </span>
       <span className={styles.cellSecondary}>{date(entry.at)}</span>
       <span className={styles.cellSecondary}>
@@ -355,8 +386,12 @@ function UsageLogCard({
         {rate !== null ? ` · ${rate} t/s` : ''}
         {entry.tokens_known
           ? ` · ${t('sharing.hint_tokens_io', {
-              input: number(entry.input_tokens),
-              output: number(entry.output_tokens),
+              input: `${number(entry.input_tokens)}${
+                entry.cache_read_tokens > 0 ? `（${number(entry.cache_read_tokens)}）` : ''
+              }`,
+              output: `${number(entry.output_tokens)}${
+                entry.reasoning_tokens > 0 ? `（${number(entry.reasoning_tokens)}）` : ''
+              }`,
             })}`
           : ''}
         {` · ${t(entry.stream ? 'sharing.stream' : 'sharing.nonstream')}`}
@@ -391,27 +426,41 @@ export function UsagePage() {
   const queryString = params.toString();
 
   const [model, setModel] = useState(params.get('model') || '');
-  const [keyID, setKeyID] = useState(appliedKeyID);
   const [channelID, setChannelID] = useState(params.get('channel_id') || '');
+  const [keyDraft, setKeyText] = useState<string | null>(null);
   const [preset, setPreset] = useState<RangePreset>(() =>
     detectPreset(params.get('from') || '', params.get('to') || '')
   );
   const [customFrom, setCustomFrom] = useState(() => toDayInput(params.get('from'), 0));
   const [customTo, setCustomTo] = useState(() => toDayInput(params.get('to'), -1));
 
-  const [options, setOptions] = useState<{ channels: Channel[]; keys: PersonalKey[] } | null>(
-    null
-  );
+  const [options, setOptions] = useState<{
+    channels: Channel[];
+    keys: PersonalKey[];
+    users: Account[];
+    allKeys: SharedKeyRef[];
+  } | null>(null);
   const [selected, setSelected] = useState<UsageEntry | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [channels, keys] = await Promise.all([sharingApi.channels(), sharingApi.keys()]);
-        if (!cancelled) setOptions({ channels: channels.channels, keys: keys.keys });
+        const [channels, keys, users, allKeys] = await Promise.all([
+          sharingApi.channels(),
+          sharingApi.keys(),
+          sharingApi.users(),
+          sharingApi.allKeys(),
+        ]);
+        if (!cancelled)
+          setOptions({
+            channels: channels.channels,
+            keys: keys.keys,
+            users: users.users,
+            allKeys: allKeys.keys,
+          });
       } catch {
-        // Filter options are best-effort; free-text filtering keeps working.
+        // Usage records remain available if filter suggestions fail to load.
       }
     })();
     return () => {
@@ -419,8 +468,8 @@ export function UsagePage() {
     };
   }, []);
 
-  // The summary feed drives the stat pills, the daily trend and model
-  // suggestions; the paged entry list loads alongside it.
+  // The summary feed drives the stat pills and the daily trend; the paged
+  // entry list loads alongside it.
   const { data, loading, error } = useSharingData(
     useCallback(async () => {
       const values: Record<string, string | number> = {
@@ -439,20 +488,76 @@ export function UsagePage() {
   );
 
   const groups = useMemo(() => data?.summary.groups ?? [], [data]);
-  const models = useMemo(
-    () =>
-      [
-        ...new Set(groups.map((group) => group.model).filter((value): value is string => Boolean(value))),
-      ].sort((a, b) => a.localeCompare(b)),
-    [groups]
+
+  // Model suggestions use a summary that ignores the applied model filter and
+  // pagination, so choosing a model never shrinks the dropdown to itself.
+  const candidateQuery = useMemo(
+    () => buildModelCandidateQuery(queryString, scope, me),
+    [queryString, scope, me]
+  );
+  const { data: candidateSummary } = useSharingData(
+    useCallback(
+      () => sharingApi.summary(Object.fromEntries(new URLSearchParams(candidateQuery))),
+      [candidateQuery]
+    )
   );
 
+  // Candidates pair every bare model (even load balancing) with each channel
+  // that served it, in the same display form the log entries use; selecting
+  // one pins the filter to that exact serving channel server-side.
+  const models = useMemo(() => {
+    const set = new Set<string>();
+    for (const group of candidateSummary?.groups ?? []) {
+      if (!group.model) continue;
+      set.add(group.model);
+      if (!group.model.includes('/') && group.channel)
+        set.add(`${group.model}（${group.channel}/${group.model}）`);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [candidateSummary]);
+
+  const keyLabel = useCallback(
+    (key: PersonalKey | SharedKeyRef) =>
+      key.name || ('hint' in key ? key.hint : '') || t('sharing.unnamed_key'),
+    [t]
+  );
+
+  const keyOptions = useMemo<UsageKeyOption[]>(() => {
+    if (!options) return [];
+    if (scope === 'mine')
+      return options.keys.map((key) => ({ label: keyLabel(key), keyId: key.id }));
+    return [
+      ...options.users.map((user) => ({ label: `@${user.username}`, consumer: user.username })),
+      ...options.allKeys.map((key) => ({
+        label: `${keyLabel(key)}（@${key.owner}）`,
+        keyId: key.id,
+      })),
+    ];
+  }, [options, scope, keyLabel]);
+  const keyFilterOptions = useMemo(() => keyOptions.map((option) => option.label), [keyOptions]);
+  const appliedConsumer = scope === 'mine' ? '' : params.get('consumer') || '';
+  const keyText =
+    keyDraft ??
+    (appliedKeyID
+      ? keyOptions.find((option) => option.keyId === appliedKeyID)?.label || ''
+      : appliedConsumer
+        ? `@${appliedConsumer}`
+        : '');
+  const resolvedModel = resolveUsageModel(model, models, params.get('model') || '');
+  const resolvedKey =
+    keyDraft === null && (appliedKeyID || appliedConsumer)
+      ? { label: keyText, keyId: appliedKeyID || undefined, consumer: appliedConsumer || undefined }
+      : resolveUsageKey(keyText, keyOptions);
+  const canApply = resolvedModel !== null && resolvedKey !== null;
+
   const apply = () => {
+    if (resolvedModel === null || resolvedKey === null) return;
     const next = new URLSearchParams();
     if (scope !== 'mine') next.set('scope', scope);
-    if (model.trim()) next.set('model', model.trim());
+    if (resolvedModel) next.set('model', resolvedModel);
     if (channelID) next.set('channel_id', channelID);
-    if (keyID && scope === 'mine') next.set('key_id', keyID);
+    if (resolvedKey.keyId) next.set('key_id', resolvedKey.keyId);
+    if (resolvedKey.consumer && scope !== 'mine') next.set('consumer', resolvedKey.consumer);
     if (preset === 'custom') {
       if (customFrom) next.set('from', startOfDay(parseDayInput(customFrom)).toISOString());
       if (customTo)
@@ -471,7 +576,7 @@ export function UsagePage() {
   const reset = () => {
     setModel('');
     setChannelID('');
-    setKeyID('');
+    setKeyText('');
     setPreset('all');
     setCustomFrom('');
     setCustomTo('');
@@ -484,7 +589,8 @@ export function UsagePage() {
     const next = new URLSearchParams(params);
     next.delete('page');
     next.delete('key_id');
-    setKeyID('');
+    next.delete('consumer');
+    setKeyText('');
     if (value === 'mine') next.delete('scope');
     else next.set('scope', value);
     setParams(next);
@@ -503,6 +609,7 @@ export function UsagePage() {
     total && total.executions > 0 ? (total.failures / total.executions) * 100 : null;
   const tokenHint = total
     ? [
+        number(total.total_tokens),
         t('sharing.hint_tokens_io', {
           input: number(total.input_tokens),
           output: number(total.output_tokens),
@@ -514,17 +621,6 @@ export function UsagePage() {
         .filter(Boolean)
         .join('；')
     : undefined;
-
-  const keyOptions = useMemo(() => {
-    const keys = options?.keys ?? [];
-    const list = [
-      { value: '', label: t('sharing.all_keys') },
-      ...keys.map((key) => ({ value: key.id, label: key.name || key.hint })),
-    ];
-    if (keyID && !keys.some((key) => key.id === keyID))
-      list.push({ value: keyID, label: t('sharing.unknown_key') });
-    return list;
-  }, [options, keyID, t]);
 
   const showConsumer = scope !== 'mine';
 
@@ -582,6 +678,9 @@ export function UsagePage() {
             value={model}
             onChange={setModel}
             options={models}
+            placeholder={t('sharing.all_models')}
+            emptyHint={t('sharing.no_model_options')}
+            clearLabel={t('sharing.clear_filter')}
           />
           <div className="form-group">
             <label>{t('sharing.channel')}</label>
@@ -598,19 +697,22 @@ export function UsagePage() {
               ]}
             />
           </div>
-          {scope === 'mine' && (
-            <div className="form-group">
-              <label>{t('sharing.key_label')}</label>
-              <Select
-                value={keyID}
-                onChange={setKeyID}
-                ariaLabel={t('sharing.key_label')}
-                options={keyOptions}
-              />
-            </div>
-          )}
+          <AutocompleteInput
+            label={
+              scope === 'mine' ? t('sharing.key_label') : t('sharing.key_member_label')
+            }
+            value={keyText}
+            onChange={setKeyText}
+            options={keyFilterOptions}
+            placeholder={
+              scope === 'mine' ? t('sharing.all_keys') : t('sharing.key_or_member')
+            }
+            clearLabel={t('sharing.clear_filter')}
+          />
           <div className={styles.actions}>
-            <Button onClick={apply}>{t('sharing.apply_filter')}</Button>
+            <Button onClick={apply} disabled={!canApply}>
+              {t('sharing.apply_filter')}
+            </Button>
             <Button variant="secondary" onClick={reset}>
               {t('sharing.clear_filter')}
             </Button>
@@ -624,7 +726,7 @@ export function UsagePage() {
           <span className={styles.statPill} title={tokenHint}>
             <span className={styles.statPillLabel}>{t('sharing.pill_tokens')}</span>
             <span className={styles.statPillValue}>
-              {total ? number(total.total_tokens) : '—'}
+              {total ? formatCompactNumber(total.total_tokens) : '—'}
             </span>
           </span>
           <span

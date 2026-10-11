@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -149,6 +150,9 @@ func (s *Server) hubRequestMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(errAuth.HTTPStatusCode(), gin.H{"error": errAuth.Message})
 			return
 		}
+		var blockedModels []string
+		_ = json.Unmarshal([]byte(result.Metadata["key_blocked_models"]), &blockedModels)
+		c.Request = c.Request.WithContext(coreauth.WithBlockedModels(c.Request.Context(), blockedModels))
 		if keyAutoBalance := result.Metadata["key_auto_balance"] == "true"; keyAutoBalance {
 			c.Request = c.Request.WithContext(coreauth.WithBareModelsAllowed(c.Request.Context()))
 		}

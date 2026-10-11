@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { sharingApi } from '@/services/api/sharing';
 import { useAuthStore } from '@/stores';
+import { formatCompactNumber } from '@/utils/format';
 import { DailyTrend, LoadState, PageHeader } from './shared';
 import { useSharingData, number } from './hooks';
 import { formatMS, formatPercent, performanceMetrics } from './marketplace';
@@ -48,7 +49,7 @@ export function SharingDashboard() {
     const models = data?.marketplace.models ?? [];
     const failureRate =
       total && total.executions > 0 ? ((total.failures / total.executions) * 100).toFixed(1) : null;
-    return [
+    const stats: { key: string; label: string; value: string; title?: string; hint: string }[] = [
       {
         key: 'calls',
         label: t('sharing.routed_calls'),
@@ -60,7 +61,9 @@ export function SharingDashboard() {
       {
         key: 'tokens',
         label: t('sharing.total_tokens'),
-        value: total ? number(total.total_tokens) : '—',
+        // BigModel-style: compact headline figure, exact count on hover and in the IO hint.
+        value: total ? formatCompactNumber(total.total_tokens) : '—',
+        title: total ? number(total.total_tokens) : undefined,
         hint: total
           ? t('sharing.hint_tokens_io', {
               input: number(total.input_tokens),
@@ -85,6 +88,7 @@ export function SharingDashboard() {
           : '',
       },
     ];
+    return stats;
   }, [data, t]);
 
   const last24h = useMemo(() => {
@@ -131,7 +135,7 @@ export function SharingDashboard() {
           <Card key={stat.key}>
             <div className={styles.stat}>
               {stat.label}
-              <strong>{stat.value}</strong>
+              <strong title={stat.title}>{stat.value}</strong>
               {stat.hint && <span className={styles.statHint}>{stat.hint}</span>}
             </div>
           </Card>
@@ -175,7 +179,9 @@ export function SharingDashboard() {
               </div>
               <div className={styles.stat}>
                 {t('sharing.total_tokens')}
-                <strong>{data ? number(data.mine.total.total_tokens) : '—'}</strong>
+                <strong title={data ? number(data.mine.total.total_tokens) : undefined}>
+                  {data ? formatCompactNumber(data.mine.total.total_tokens) : '—'}
+                </strong>
               </div>
             </div>
             <Link to="/usage" className="btn btn-secondary">
@@ -192,7 +198,9 @@ export function SharingDashboard() {
               </div>
               <div className={styles.stat}>
                 {t('sharing.total_tokens')}
-                <strong>{data ? number(data.contributed.total.total_tokens) : '—'}</strong>
+                <strong title={data ? number(data.contributed.total.total_tokens) : undefined}>
+                  {data ? formatCompactNumber(data.contributed.total.total_tokens) : '—'}
+                </strong>
               </div>
             </div>
             <p className="hint">{t('sharing.contribution_hint')}</p>

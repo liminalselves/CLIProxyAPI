@@ -31,8 +31,16 @@ export interface PersonalKey {
   name: string;
   hint: string;
   auto_balance: boolean;
+  blocked_models: string[];
   disabled: boolean;
   created_at: string;
+}
+
+/** Trimmed key reference from /keys/all; carries no secret material. */
+export interface SharedKeyRef {
+  id: string;
+  owner: string;
+  name: string;
 }
 
 export interface Invitation {
@@ -121,6 +129,8 @@ export interface UsageEntry {
   cache_creation_tokens: number;
   total_tokens: number;
   tokens_known: boolean;
+  /** Translated upstream thinking level (low/high/…), empty when the model did not set one. */
+  reasoning_effort?: string;
 }
 
 export interface Summary {
