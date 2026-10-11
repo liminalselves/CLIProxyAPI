@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { KIMI_CONFIG } from '@/features/quota/providers/kimi/data';
 import { apiCallApi, authFilesApi } from '@/services/api';
-import { KIMI_AI_USAGE_URL, KIMI_USAGE_URL, buildKimiQuotaRows } from '@/utils/quota';
+import { KIMI_USAGE_URL, buildKimiQuotaRows } from '@/utils/quota';
 import type { AuthFileItem } from '@/types';
 
 describe('Kimi monthly quota', () => {
@@ -41,9 +41,9 @@ describe('Kimi International auth files', () => {
     expect(KIMI_CONFIG.filterFn(file)).toBe(true);
   });
 
-  test('kimi-ai credentials query the kimi.ai host', async () => {
+  test('regional credentials delegate host selection to the server without downloading files', async () => {
     const urls: string[] = [];
-    const download = spyOn(authFilesApi, 'downloadText').mockResolvedValue('{}');
+    const download = spyOn(authFilesApi, 'downloadText').mockRejectedValue(new Error('403'));
     const request = apiCallApi.request;
     apiCallApi.request = (async ({ url }: { url: string }) => {
       urls.push(url);
@@ -56,10 +56,11 @@ describe('Kimi International auth files', () => {
           ((key: string) => key) as never
         );
       }
+      expect(download).not.toHaveBeenCalled();
     } finally {
       apiCallApi.request = request;
       download.mockRestore();
     }
-    expect(urls).toEqual([KIMI_USAGE_URL, KIMI_AI_USAGE_URL, KIMI_AI_USAGE_URL]);
+    expect(urls).toEqual([KIMI_USAGE_URL, KIMI_USAGE_URL, KIMI_USAGE_URL]);
   });
 });

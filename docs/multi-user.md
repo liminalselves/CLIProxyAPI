@@ -303,7 +303,7 @@ The account API base is `/v8/hub`. Protected endpoints accept
 | `/credentials/:route_id/download` | GET | Owner/admin credential export; never public. |
 | `/credentials/:route_id/fields` | PATCH | Original details-editor settings, excluding owner/prefix/token fields. |
 | `/credentials/:route_id/refresh` | POST | Original credential refresh, without returning tokens. |
-| `/credentials/:route_id/api-call` | POST | Member quota queries: proxies GET/POST to the credential provider's allowlisted quota endpoints (host+path checked per provider, `$TOKEN$` substituted server-side, never echoed). Powers the credential-card quota section in account mode. |
+| `/credentials/:route_id/api-call` | POST | Member quota queries through provider-allowlisted endpoints; credential secrets are substituted server-side. See the quota lookup contract below. |
 | `/credentials/:route_id/claim` | POST | Administrator assigns an unclaimed file to a channel. |
 | `/marketplace` | GET | Published channel models with owner/provider information. |
 | `/marketplace/performance` | GET | Trailing-24h per-model usage aggregates (requests, failures, latency/TTFT sums, output tokens, generation time) in hourly buckets, powering the marketplace performance dialog (TPS, avg latency, success rate, per-channel table, trends). |
@@ -313,6 +313,14 @@ The account API base is `/v8/hub`. Protected endpoints accept
 | `/users`, `/users/:username` | GET / PATCH | All-member directory / admin `role` or `disabled` changes only. |
 | `/invites`, `/invites/:id` | GET, POST / DELETE | Administrator invitation issue/list/revoke. |
 | `/usage`, `/usage/summary`, `/calls`, `/audit` | GET | All-member persistent usage and operation history. |
+
+Quota lookup never requires credential export permission. The server resolves Kimi's
+`.com`/`.ai` usage host from the live credential and substitutes Meta's persisted
+DCA token for `$DCA_TOKEN$` only at `/muse-code/key`; ordinary `$TOKEN$` calls retain
+their provider token behavior. Credential summaries include Antigravity project IDs
+and parsed Codex account/subscription claims, not raw JWTs or credential secrets.
+These rules also apply to management-mode quota queries; export permissions remain
+unchanged.
 
 Credential `route_id` values are URL-safe base64 encodings of runtime credential
 IDs, returned by `/credentials`; opaque IDs prevent path separators from becoming

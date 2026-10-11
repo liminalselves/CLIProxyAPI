@@ -14,6 +14,19 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
 
+func TestAuthProjectIDIncludesQuotaLookupFields(t *testing.T) {
+	for _, auth := range []*coreauth.Auth{
+		{Metadata: map[string]any{"projectId": " project-fixture "}},
+		{Metadata: map[string]any{"installed": map[string]any{"project_id": "project-fixture"}}},
+		{Metadata: map[string]any{"web": map[string]any{"projectId": "project-fixture"}}},
+		{Attributes: map[string]string{"gemini_virtual_project": "project-fixture"}},
+	} {
+		if got := authProjectID(auth); got != "project-fixture" {
+			t.Fatalf("project ID = %q, want project-fixture", got)
+		}
+	}
+}
+
 func TestListAuthFiles_IncludesProjectIDFromManager(t *testing.T) {
 	t.Setenv("MANAGEMENT_PASSWORD", "")
 

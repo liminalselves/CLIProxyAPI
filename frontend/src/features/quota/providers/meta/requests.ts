@@ -6,14 +6,7 @@ import { normalizeAuthIndex } from '@/utils/authIndex';
 export const META_MUSE_QUOTA_URL = 'https://api.meta.ai/muse-code/key';
 
 export type MetaQuotaErrorCode =
-  | 'missing_auth_index'
-  | 'missing_file'
-  | 'missing_dca_token'
-  | 'invalid_auth_file'
-  | 'download_failed'
-  | 'stale_request'
-  | 'invalid_response'
-  | 'request_failed';
+  'missing_auth_index' | 'missing_file' | 'stale_request' | 'invalid_response' | 'request_failed';
 
 export class MetaQuotaError extends Error {
   readonly status?: number;
@@ -30,38 +23,15 @@ export class MetaQuotaError extends Error {
 
 interface MetaQuotaDependencies {
   request: (payload: ApiCallRequest) => Promise<ApiCallResult>;
-  downloadText: (name: string) => Promise<string>;
   captureCurrent: (name: string) => () => boolean;
 }
 
-/** Extract only the backend's persisted DCA field; never fall back to the LLM key. */
-const readDcaToken = (text: string): string => {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new MetaQuotaError('invalid_auth_file');
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new MetaQuotaError('invalid_auth_file');
-  }
-  const raw = (value as Record<string, unknown>).dca_token;
-  const token = typeof raw === 'string' ? raw.trim() : '';
-  if (!/^dca:[^\s]+$/.test(token)) throw new MetaQuotaError('missing_dca_token');
-  return token;
-};
-
-/** Secrets remain request-local, never in quota state, errors, or browser storage. */
+/** DCA tokens are resolved server-side and never enter browser state. */
 export function createMetaQuotaFetcher(deps: MetaQuotaDependencies) {
   return async (file: AuthFileItem): Promise<MetaQuotaData> => {
     const authIndex = normalizeAuthIndex(file.authIndex ?? file.auth_index);
     if (!authIndex) throw new MetaQuotaError('missing_auth_index');
-    if (
-      !file.name?.trim() ||
-      file.runtimeOnly === true ||
-      file.runtime_only === true ||
-      file.runtime_only === 'true'
-    ) {
+    if (!file.name?.trim()) {
       throw new MetaQuotaError('missing_file');
     }
     const isCurrent = deps.captureCurrent(file.name);
@@ -69,16 +39,6 @@ export function createMetaQuotaFetcher(deps: MetaQuotaDependencies) {
       if (!isCurrent()) throw new MetaQuotaError('stale_request');
     };
     assertCurrent();
-    let authText: string;
-    try {
-      authText = await deps.downloadText(file.name);
-    } catch {
-      assertCurrent();
-      throw new MetaQuotaError('download_failed');
-    }
-    assertCurrent();
-    const dcaToken = readDcaToken(authText);
-
     let response: ApiCallResult;
     try {
       assertCurrent();
@@ -89,7 +49,7 @@ export function createMetaQuotaFetcher(deps: MetaQuotaDependencies) {
         header: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${dcaToken}`,
+          Authorization: 'Bearer $DCA_TOKEN$',
           'x-api-version': '1.0.0',
         },
         data: '{}',

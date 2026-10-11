@@ -15,8 +15,6 @@ const result = (statusCode: number, body: unknown): ApiCallResult => ({
   body,
 });
 const defaults = {
-  downloadText: async () =>
-    JSON.stringify({ dca_token: 'dca:fixture-only', api_key: 'LLM|unused' }),
   captureCurrent: () => () => true,
   request: async () => result(200, { subs_usage: { weekly: { used_percent: 1 } } }),
 };
@@ -32,30 +30,21 @@ const expectMetaError = async (promise: Promise<unknown>, code: string, status?:
   }
 };
 
-describe('Meta Muse DCA quota request', () => {
-  test('downloads the named auth file and sends its DCA through api-call, not $TOKEN$', async () => {
+describe('Meta server-resolved DCA quota request', () => {
+  test('sends a DCA placeholder instead of downloading or sending a secret', async () => {
     const requests: ApiCallRequest[] = [];
-    const names: string[] = [];
     const fetchQuota = createMetaQuotaFetcher({
       ...defaults,
-      downloadText: async (name) => {
-        names.push(name);
-        return JSON.stringify({ dca_token: ' dca:fixture-only ', api_key: 'LLM|unused' });
-      },
       request: async (request) => {
         requests.push(request);
         return result(200, {
-          subs_usage: {
-            window: { used_percent: 0, window_duration_mins: 300 },
-            weekly: { used_percent: 1 },
-          },
+          subs_usage: { window: { used_percent: 0 }, weekly: { used_percent: 1 } },
           api_key: 'must-not-propagate',
           user_email: 'fixture@example.invalid',
         });
       },
     });
-    const quota = await fetchQuota(file(' 007 '));
-    expect(names).toEqual(['meta.json']);
+    const quota = await fetchQuota({ ...file(' 007 '), runtimeOnly: true });
     expect(requests).toEqual([
       {
         authIndex: '007',
@@ -64,85 +53,28 @@ describe('Meta Muse DCA quota request', () => {
         header: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: 'Bearer dca:fixture-only',
+          Authorization: 'Bearer $DCA_TOKEN$',
           'x-api-version': '1.0.0',
         },
         data: '{}',
       },
     ]);
-    for (const secret of ['dca:', 'LLM|', 'must-not-propagate', 'fixture@example.invalid']) {
-      expect(JSON.stringify(quota)).not.toContain(secret);
-    }
+    expect(quota.windows.map((window) => window.usedPercent)).toEqual([0, 1]);
+    expect(JSON.stringify(quota)).not.toContain('must-not-propagate');
+    expect(JSON.stringify(quota)).not.toContain('fixture@example.invalid');
   });
 
-  test('rejects missing identity and runtime-only files before downloading', async () => {
+  test('rejects missing identity before requesting quota', async () => {
     let calls = 0;
     const fetchQuota = createMetaQuotaFetcher({
       ...defaults,
-      downloadText: async () => {
+      request: async () => {
         calls++;
-        return '{}';
+        return defaults.request();
       },
     });
     await expectMetaError(fetchQuota(file(undefined)), 'missing_auth_index');
     await expectMetaError(fetchQuota({ ...file('1'), name: '' }), 'missing_file');
-    await expectMetaError(fetchQuota({ ...file('1'), runtimeOnly: true }), 'missing_file');
-    await expectMetaError(fetchQuota({ ...file('1'), runtime_only: 'true' }), 'missing_file');
-    expect(calls).toBe(0);
-  });
-
-  test('rejects malformed files and missing DCA without falling back to another token', async () => {
-    let calls = 0;
-    for (const [text, code] of [
-      ['{secret', 'invalid_auth_file'],
-      ['null', 'invalid_auth_file'],
-      ['[]', 'invalid_auth_file'],
-      ['{"api_key":"LLM|fixture","access_token":"dca:unused"}', 'missing_dca_token'],
-      ['{"dca_token":"LLM|wrong"}', 'missing_dca_token'],
-      ['{"dca_token":"dca:"}', 'missing_dca_token'],
-      ['{"dca_token":"dca:bad\\r\\nheader"}', 'missing_dca_token'],
-    ]) {
-      const fetchQuota = createMetaQuotaFetcher({
-        ...defaults,
-        downloadText: async () => text,
-        request: async () => {
-          calls++;
-          return result(200, {});
-        },
-      });
-      const error = await expectMetaError(fetchQuota(file('1')), code);
-      expect(JSON.stringify(error)).not.toContain(text);
-    }
-    expect(calls).toBe(0);
-  });
-
-  test('redacts download failures', async () => {
-    const fetchQuota = createMetaQuotaFetcher({
-      ...defaults,
-      downloadText: async () => {
-        throw new Error('dca:secret');
-      },
-    });
-    const error = await expectMetaError(fetchQuota(file('1')), 'download_failed');
-    expect(JSON.stringify(error)).not.toContain('dca:secret');
-  });
-
-  test('blocks sending the DCA after a connection or credential change during download', async () => {
-    let current = true;
-    let calls = 0;
-    const fetchQuota = createMetaQuotaFetcher({
-      ...defaults,
-      captureCurrent: () => () => current,
-      downloadText: async () => {
-        current = false;
-        return defaults.downloadText();
-      },
-      request: async () => {
-        calls++;
-        return result(200, {});
-      },
-    });
-    await expectMetaError(fetchQuota(file('1')), 'stale_request');
     expect(calls).toBe(0);
   });
 
@@ -159,22 +91,6 @@ describe('Meta Muse DCA quota request', () => {
     await expectMetaError(fetchQuota(file('1')), 'stale_request');
   });
 
-  test('does not reuse DCA across refreshes', async () => {
-    let downloads = 0;
-    const headers: string[] = [];
-    const fetchQuota = createMetaQuotaFetcher({
-      ...defaults,
-      downloadText: async () => JSON.stringify({ dca_token: `dca:fixture-${++downloads}` }),
-      request: async (payload) => {
-        headers.push(payload.header!.Authorization);
-        return defaults.request();
-      },
-    });
-    await fetchQuota(file('1'));
-    await fetchQuota(file('1'));
-    expect(headers).toEqual(['Bearer dca:fixture-1', 'Bearer dca:fixture-2']);
-  });
-
   test('redacts upstream errors and management exceptions including request headers', async () => {
     for (const throws of [false, true]) {
       const fetchQuota = createMetaQuotaFetcher({
@@ -189,7 +105,6 @@ describe('Meta Muse DCA quota request', () => {
         },
       });
       const error = await expectMetaError(fetchQuota(file('1')), 'request_failed', 429);
-      expect(error.message).toBe('request_failed');
       expect(JSON.stringify(error)).not.toContain('secret');
     }
   });

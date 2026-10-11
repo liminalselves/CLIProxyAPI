@@ -139,6 +139,11 @@ func (h *Handler) APICall(c *gin.Context) {
 	if reqHeaders == nil {
 		reqHeaders = map[string]string{}
 	}
+	if errQuota := prepareCredentialQuotaRequest(auth, parsedURL, reqHeaders); errQuota != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errQuota.Error()})
+		return
+	}
+	urlStr = parsedURL.String()
 
 	var hostOverride string
 	var token string

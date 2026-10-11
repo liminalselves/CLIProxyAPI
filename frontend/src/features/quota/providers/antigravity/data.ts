@@ -1,7 +1,4 @@
-/**
- * Antigravity 额度数据层：分组配额 + 订阅信息 + 服务器时钟偏移。
- * React-free / SCSS-free。
- */
+/** Antigravity quota groups, subscription data, and server clock offset. */
 
 import type { TFunction } from 'i18next';
 import type {
@@ -14,7 +11,6 @@ import type {
 import {
   antigravitySubscriptionApi,
   apiCallApi,
-  authFilesApi,
   getApiCallErrorMessage,
   type AntigravitySubscriptionSummary,
 } from '@/services/api';
@@ -38,7 +34,7 @@ export type AntigravityQuotaData = {
   serverTimeOffsetMs: number | null;
 };
 
-const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
+const resolveAntigravityProjectId = (file: AuthFileItem): string => {
   const directProjectId = normalizeStringValue(file.project_id ?? file.projectId);
   if (directProjectId) return directProjectId;
 
@@ -61,34 +57,6 @@ const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> 
       )
     : null;
   if (attributesProjectId) return attributesProjectId;
-
-  try {
-    const text = await authFilesApi.downloadText(file.name);
-    const trimmed = text.trim();
-    if (!trimmed) return '';
-
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-    const topLevel = normalizeStringValue(parsed.project_id ?? parsed.projectId);
-    if (topLevel) return topLevel;
-
-    const installed =
-      parsed.installed && typeof parsed.installed === 'object' && parsed.installed !== null
-        ? (parsed.installed as Record<string, unknown>)
-        : null;
-    const installedProjectId = installed
-      ? normalizeStringValue(installed.project_id ?? installed.projectId)
-      : null;
-    if (installedProjectId) return installedProjectId;
-
-    const web =
-      parsed.web && typeof parsed.web === 'object' && parsed.web !== null
-        ? (parsed.web as Record<string, unknown>)
-        : null;
-    const webProjectId = web ? normalizeStringValue(web.project_id ?? web.projectId) : null;
-    if (webProjectId) return webProjectId;
-  } catch {
-    return '';
-  }
 
   return '';
 };
@@ -126,7 +94,7 @@ const fetchAntigravityQuota = async (
     throw new Error(t('antigravity_quota.missing_auth_index'));
   }
 
-  const projectId = await resolveAntigravityProjectId(file);
+  const projectId = resolveAntigravityProjectId(file);
   if (!projectId) {
     throw new Error(t('antigravity_quota.missing_project_id'));
   }

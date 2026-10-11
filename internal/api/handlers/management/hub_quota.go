@@ -58,7 +58,7 @@ var hubQuotaRoutes = map[string][]hubQuotaRoute{
 }
 
 func hubQuotaRouteAllowed(provider, host, path string) bool {
-	routes, known := hubQuotaRoutes[strings.ToLower(strings.TrimSpace(provider))]
+	routes, known := hubQuotaRoutes[quotaProviderKey(provider)]
 	if !known {
 		return false
 	}
@@ -129,6 +129,11 @@ func (h *Handler) HubQuotaAPICall(c *gin.Context) {
 	if reqHeaders == nil {
 		reqHeaders = map[string]string{}
 	}
+	if errQuota := prepareCredentialQuotaRequest(a, parsedURL, reqHeaders); errQuota != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errQuota.Error()})
+		return
+	}
+	urlStr = parsedURL.String()
 
 	var token string
 	var tokenResolved bool

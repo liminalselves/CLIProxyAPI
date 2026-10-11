@@ -362,7 +362,7 @@ func (h *Handler) HubCredentials(c *gin.Context) {
 			item["proxy_url"], _ = a.Metadata["proxy_url"].(string)
 		}
 		entry := h.buildAuthFileEntry(a)
-		for _, key := range []string{"auth_index", "email", "project_id", "created_at", "updated_at", "modtime", "last_refresh", "size", "unavailable", "status_message", "cooldowns", "recent_requests", "success", "failed", "note", "priority", "weight"} {
+		for _, key := range []string{"auth_index", "email", "project_id", "id_token", "created_at", "updated_at", "modtime", "last_refresh", "size", "unavailable", "status_message", "cooldowns", "recent_requests", "success", "failed", "note", "priority", "weight"} {
 			if value, ok := entry[key]; ok {
 				item[key] = value
 			}

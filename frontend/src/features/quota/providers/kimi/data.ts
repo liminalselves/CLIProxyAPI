@@ -1,14 +1,12 @@
-/**
- * Kimi 额度数据层。React-free / SCSS-free。
- */
+/** Kimi quota data adapter. React-free / SCSS-free. */
 
 import type { TFunction } from 'i18next';
 import type { AuthFileItem, KimiQuotaRow, KimiQuotaState } from '@/types';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
-import { resolveKimiQuotaUrl } from '@/services/api/kimiQuota';
 import { captureQuotaCacheGeneration, commitIfQuotaCacheCurrent } from '@/stores/useQuotaStore';
 import {
   KIMI_REQUEST_HEADERS,
+  KIMI_USAGE_URL,
   parseKimiUsagePayload,
   buildKimiQuotaRows,
   createStatusError,
@@ -31,19 +29,12 @@ const fetchKimiQuota = async (file: AuthFileItem, t: TFunction): Promise<KimiQuo
       throw new Error(t('kimi_quota.stale_request'));
     }
   };
-  let url: string;
-  try {
-    url = await resolveKimiQuotaUrl(file);
-  } catch {
-    assertCurrent();
-    throw new Error(t('kimi_quota.domain_unavailable'));
-  }
   assertCurrent();
 
   const result = await apiCallApi.request({
     authIndex,
     method: 'GET',
-    url,
+    url: KIMI_USAGE_URL,
     header: { ...KIMI_REQUEST_HEADERS },
   });
   assertCurrent();

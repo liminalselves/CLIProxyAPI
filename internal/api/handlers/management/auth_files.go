@@ -889,16 +889,27 @@ func authProjectID(auth *coreauth.Auth) string {
 	if auth == nil {
 		return ""
 	}
-	if auth.Metadata != nil {
-		if v, ok := auth.Metadata["project_id"].(string); ok {
-			if projectID := strings.TrimSpace(v); projectID != "" {
-				return projectID
+	readProjectID := func(fields map[string]any) string {
+		for _, key := range []string{"project_id", "projectId"} {
+			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
 			}
 		}
+		return ""
 	}
-	if auth.Attributes != nil {
-		if projectID := strings.TrimSpace(auth.Attributes["project_id"]); projectID != "" {
+	if projectID := readProjectID(auth.Metadata); projectID != "" {
+		return projectID
+	}
+	for _, key := range []string{"project_id", "projectId", "gemini_virtual_project"} {
+		if projectID := strings.TrimSpace(auth.Attributes[key]); projectID != "" {
 			return projectID
+		}
+	}
+	for _, key := range []string{"installed", "web"} {
+		if nested, ok := auth.Metadata[key].(map[string]any); ok {
+			if projectID := readProjectID(nested); projectID != "" {
+				return projectID
+			}
 		}
 	}
 	return ""
