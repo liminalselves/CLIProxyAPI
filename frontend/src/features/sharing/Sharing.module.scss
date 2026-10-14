@@ -237,21 +237,6 @@
   border-top: 1px solid var(--border-color);
 }
 
-// Single-route groups render as one merged row, so there is no header
-// above it and no separating border.
-.keyFilterSolo {
-  align-items: flex-start;
-  padding: $spacing-sm $spacing-md;
-}
-
-.keyFilterSoloModel {
-  font-family: $font-mono;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .keyFilterRouteLabel {
   display: flex;
   flex-direction: column;

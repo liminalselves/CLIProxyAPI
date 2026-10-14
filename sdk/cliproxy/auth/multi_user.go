@@ -55,6 +55,9 @@ type blockedModelsContextKey struct{}
 type modelBlocklist map[string]struct{}
 
 // WithBlockedModels attaches the key's model exclusions to this request.
+// Entries may be a bare base model ("gpt-6", excluded on every route), a
+// pinned "prefix/model" route, a credential or provider prefix
+// ("123-kimi#1", "123-myprovider"), or a channel slug ("123").
 func WithBlockedModels(ctx context.Context, models []string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -96,9 +99,57 @@ func (blocked modelBlocklist) blocks(model string) bool {
 	return false
 }
 
+// blocksAuth reports whether this credential is excluded for the model. On top
+// of the string-level rules of blocks, entries scope to the credential by its
+// pinned prefix ("123-kimi#1"), by channel plus credential type ("123-kimi"),
+// or by the whole channel slug ("123"), matched against channel metadata.
+func (blocked modelBlocklist) blocksAuth(auth *Auth, model string) bool {
+	if len(blocked) == 0 || auth == nil {
+		return false
+	}
+	if blocked.blocks(model) {
+		return true
+	}
+	prefix := strings.TrimSpace(auth.Prefix)
+	base := canonicalModelKey(model)
+	if route, rest, pinned := strings.Cut(base, "/"); pinned {
+		if route != prefix {
+			// Pinned to another credential; this auth stays eligible.
+			return false
+		}
+		base = rest
+	}
+	if prefix != "" {
+		if _, ok := blocked[prefix]; ok {
+			return true
+		}
+		if _, ok := blocked[prefix+"/"+base]; ok {
+			return true
+		}
+	}
+	channel := auth.metadataString("channel_prefix")
+	if channel == "" {
+		return false
+	}
+	if _, ok := blocked[channel]; ok {
+		return true
+	}
+	if credType := auth.metadataString("credential_type"); credType != "" {
+		_, ok := blocked[channel+"-"+credType]
+		return ok
+	}
+	return false
+}
+
 // ModelBlocked matches either a pinned route or a base name excluded across all channels.
 func ModelBlocked(ctx context.Context, model string) bool {
 	return blockedModelsFromContext(ctx).blocks(model)
+}
+
+// AuthModelBlocked reports whether this credential's route for the model is
+// excluded for the request key, including credential and channel scopes.
+func AuthModelBlocked(ctx context.Context, auth *Auth, model string) bool {
+	return blockedModelsFromContext(ctx).blocksAuth(auth, model)
 }
 
 type bareModelsContextKey struct{}

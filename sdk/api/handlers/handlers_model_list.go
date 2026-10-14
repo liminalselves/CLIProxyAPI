@@ -24,7 +24,7 @@ func (h *BaseAPIHandler) FilterModelsForRequest(c *gin.Context, models []map[str
 				continue
 			}
 			for _, model := range reg.GetModelsForClient(credential.ID) {
-				if model == nil || !strings.HasPrefix(model.ID, credential.Prefix+"/") || !credential.ChannelModelEnabled(model.ID) || coreauth.ModelBlocked(ctx, model.ID) {
+				if model == nil || !strings.HasPrefix(model.ID, credential.Prefix+"/") || !credential.ChannelModelEnabled(model.ID) || coreauth.AuthModelBlocked(ctx, credential, model.ID) {
 					continue
 				}
 				allowedRoutes[model.ID] = struct{}{}

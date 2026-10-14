@@ -122,13 +122,7 @@ func (e authSelectionEligibility) allows(auth *Auth) bool {
 }
 
 func (e authSelectionEligibility) allowsModel(auth *Auth, model string) bool {
-	if !e.allows(auth) || e.blockedModels.blocks(model) {
-		return false
-	}
-	if !strings.Contains(model, "/") && auth.Prefix != "" {
-		return !e.blockedModels.blocks(auth.Prefix + "/" + model)
-	}
-	return true
+	return e.allows(auth) && !e.blockedModels.blocksAuth(auth, model)
 }
 
 func blockedModelError() *Error {

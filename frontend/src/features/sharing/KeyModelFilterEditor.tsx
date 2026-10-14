@@ -23,33 +23,68 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
     [value]
   );
   const models = useMemo(() => data?.models ?? [], [data?.models]);
+  const channels = useMemo(() => data?.channels ?? [], [data?.channels]);
   const groups = useMemo(() => groupMarketplaceModels(models, { search }), [models, search]);
+
+  // Channel prefixes for scope entries: the pinned prefix ("123-kimi#1",
+  // "123-provider") blocks one credential or provider, the channel prefix
+  // ("123") blocks the whole channel.
+  const channelPrefixByID = useMemo(
+    () => new Map(channels.map((channel) => [channel.id, channel.prefix])),
+    [channels]
+  );
+
+  const query = search.trim().toLowerCase();
   const staleModels = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const knownRoutes = new Set(models.map((model) => model.id));
-    const knownBases = new Set(models.map((model) => model.base_model));
+    const known = new Set<string>();
+    for (const model of models) {
+      known.add(model.id);
+      known.add(model.base_model);
+      known.add(model.channel);
+    }
+    for (const channel of channels) known.add(channel.prefix);
     return [...selected]
-      .filter((model) => !knownRoutes.has(model) && !knownBases.has(model))
+      .filter((model) => !known.has(model))
       .filter((model) => !query || model.toLowerCase().includes(query))
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-  }, [models, search, selected]);
+  }, [models, channels, query, selected]);
 
-  const setBlocked = (model: string, blocked: boolean) => {
+  // One row per distinct credential/provider prefix inside each channel.
+  const channelScopes = useMemo(
+    () =>
+      channels
+        .map((channel) => {
+          const scopes = new Map<string, { provider: string; count: number }>();
+          for (const model of models) {
+            if (model.channel_id !== channel.id) continue;
+            const scope = scopes.get(model.channel) ?? { provider: model.provider, count: 0 };
+            scope.count += 1;
+            scopes.set(model.channel, scope);
+          }
+          const prefixes = [...scopes.entries()]
+            .map(([prefix, meta]) => ({ prefix, ...meta }))
+            .sort((left, right) => left.prefix.localeCompare(right.prefix, undefined, { numeric: true }));
+          return { channel, prefixes };
+        })
+        .filter(
+          ({ channel, prefixes }) =>
+            !query ||
+            channel.slug.toLowerCase().includes(query) ||
+            channel.owner.toLowerCase().includes(query) ||
+            prefixes.some((scope) => scope.prefix.toLowerCase().includes(query))
+        ),
+    [channels, models, query]
+  );
+
+  const setBlocked = (entry: string, blocked: boolean) => {
     const next = new Set(selected);
-    if (blocked) next.add(model);
-    else next.delete(model);
+    if (blocked) next.add(entry);
+    else next.delete(entry);
     onChange([...next]);
   };
 
-  // Single-route groups are one merged row; blocking writes the bare model so
-  // channels added later stay covered, and clears any stale route-level entry.
-  const setSoloBlocked = (baseModel: string, routeId: string, blocked: boolean) => {
-    const next = new Set(selected);
-    next.delete(routeId);
-    if (blocked) next.add(baseModel);
-    else next.delete(baseModel);
-    onChange([...next]);
-  };
+  const scopeBlocked = (channelID: string, prefix: string) =>
+    selected.has(prefix) || selected.has(channelPrefixByID.get(channelID) ?? '');
 
   if (loading || error) {
     return (
@@ -78,48 +113,12 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
         onChange={(event) => setSearch(event.target.value)}
         placeholder={t('sharing.search_models')}
       />
-      {groups.length === 0 && staleModels.length === 0 ? (
+      {groups.length === 0 && channelScopes.length === 0 && staleModels.length === 0 ? (
         <p className={styles.keyFilterEmpty}>{t('sharing.key_filter_empty')}</p>
       ) : (
         <div className={styles.keyFilterList}>
           {groups.map((group) => {
             const allBlocked = selected.has(group.baseModel);
-            const solo = group.routes.length === 1 ? group.routes[0] : null;
-            if (solo) {
-              const blocked = allBlocked || selected.has(solo.id);
-              const source = t('sharing.key_filter_source', {
-                channel: solo.channel_slug || solo.channel,
-                owner: solo.owner,
-                provider: solo.provider,
-              });
-              return (
-                <section className={styles.keyFilterGroup} key={group.baseModel}>
-                  <SelectionCheckbox
-                    className={styles.keyFilterSolo}
-                    checked={blocked}
-                    onChange={(value) => setSoloBlocked(group.baseModel, solo.id, value)}
-                    ariaLabel={t('sharing.key_filter_block_group', { model: group.baseModel })}
-                    title={t('sharing.key_filter_all_channels_hint')}
-                    label={
-                      <span className={styles.keyFilterRouteLabel}>
-                        <span className={styles.keyFilterSoloModel}>{group.baseModel}</span>
-                        <span className={styles.keyFilterRouteMeta}>
-                          {solo.id !== group.baseModel && (
-                            <span className={styles.mono}>{solo.id}</span>
-                          )}
-                          <span>{source}</span>
-                          {!solo.available && (
-                            <span className={styles.keyFilterUnavailable}>
-                              {t('sharing.key_filter_unavailable')}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                    }
-                  />
-                </section>
-              );
-            }
             return (
               <section className={styles.keyFilterGroup} key={group.baseModel}>
                 <div className={styles.keyFilterGroupHeader}>
@@ -140,7 +139,8 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
                 </div>
                 <div className={styles.keyFilterRoutes}>
                   {group.routes.map((route) => {
-                    const blocked = allBlocked || selected.has(route.id);
+                    const scoped = scopeBlocked(route.channel_id, route.channel);
+                    const blocked = allBlocked || scoped || selected.has(route.id);
                     const source = t('sharing.key_filter_source', {
                       channel: route.channel_slug || route.channel,
                       owner: route.owner,
@@ -151,7 +151,7 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
                         key={route.id}
                         className={styles.keyFilterRoute}
                         checked={blocked}
-                        disabled={allBlocked}
+                        disabled={allBlocked || scoped}
                         onChange={(value) => setBlocked(route.id, value)}
                         ariaLabel={t('sharing.key_filter_block_route', { model: route.id })}
                         label={
@@ -170,6 +170,52 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
                       />
                     );
                   })}
+                </div>
+              </section>
+            );
+          })}
+          {channelScopes.map(({ channel, prefixes }) => {
+            const channelBlocked = selected.has(channel.prefix);
+            return (
+              <section className={styles.keyFilterGroup} key={channel.id}>
+                <div className={styles.keyFilterGroupHeader}>
+                  <SelectionCheckbox
+                    checked={channelBlocked}
+                    onChange={(blocked) => setBlocked(channel.prefix, blocked)}
+                    ariaLabel={t('sharing.key_filter_block_channel', { channel: channel.slug })}
+                    title={t('sharing.key_filter_channel_hint')}
+                    label={
+                      <span className={styles.keyFilterGroupTitle}>
+                        <span className={styles.mono}>{channel.slug}</span>
+                        <span className={styles.keyFilterMeta}>
+                          {t('sharing.key_filter_channel_all', { owner: channel.owner })}
+                        </span>
+                      </span>
+                    }
+                  />
+                </div>
+                <div className={styles.keyFilterRoutes}>
+                  {prefixes.map((scope) => (
+                    <SelectionCheckbox
+                      key={scope.prefix}
+                      className={styles.keyFilterRoute}
+                      checked={channelBlocked || selected.has(scope.prefix)}
+                      disabled={channelBlocked}
+                      onChange={(blocked) => setBlocked(scope.prefix, blocked)}
+                      ariaLabel={t('sharing.key_filter_block_scope', { scope: scope.prefix })}
+                      label={
+                        <span className={styles.keyFilterRouteLabel}>
+                          <span className={styles.keyFilterRouteId}>{scope.prefix}</span>
+                          <span className={styles.keyFilterRouteMeta}>
+                            {t('sharing.key_filter_scope_meta', {
+                              provider: scope.provider,
+                              count: scope.count,
+                            })}
+                          </span>
+                        </span>
+                      }
+                    />
+                  ))}
                 </div>
               </section>
             );

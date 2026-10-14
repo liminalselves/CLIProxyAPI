@@ -52,5 +52,10 @@ describe('key model filter', () => {
     ]);
     // Routes of other models and unmatched pinned routes stay.
     expect(normalizeKeyBlockedModels(['123/deepseek', 'gpt-5'])).toEqual(['123/deepseek', 'gpt-5']);
+    // A credential or channel scope covers the routes under its prefix.
+    expect(normalizeKeyBlockedModels(['123-kimi#1/gpt-6', '123-kimi#1', '456/gpt-6'])).toEqual([
+      '123-kimi#1',
+      '456/gpt-6',
+    ]);
   });
 });

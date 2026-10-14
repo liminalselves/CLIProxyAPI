@@ -120,6 +120,10 @@ func TestHubKeyModelFiltersAndBareModelLists(t *testing.T) {
 		t.Fatalf("filtered bare calls used blocked source: %v", selected)
 	}
 	request("POST", "/v1/chat/completions", secret, `{"model":"123/deepseek(high)","messages":[]}`, 403)
+	// A scope entry without a slash blocks the whole credential prefix.
+	patch(`{"blocked_models":["123"]}`)
+	assertModels(secret, "564/deepseek", "deepseek")
+	request("POST", "/v1/chat/completions", secret, `{"model":"123/deepseek","messages":[]}`, 403)
 	patch(`{"blocked_models":["123/deepseek","564/deepseek"]}`)
 	assertModels(secret)
 	blocked := request("POST", "/v1/chat/completions", secret, `{"model":"deepseek","messages":[]}`, 403)

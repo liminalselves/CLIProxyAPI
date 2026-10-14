@@ -1,4 +1,4 @@
-/** Remove blank/duplicate entries and redundant pinned routes covered by a bare model block. */
+/** Remove blank/duplicate entries and pinned routes covered by a bare model or scope block. */
 export function normalizeKeyBlockedModels(values: readonly string[]): string[] {
   const cleaned: string[] = [];
   const seen = new Set<string>();
@@ -9,9 +9,14 @@ export function normalizeKeyBlockedModels(values: readonly string[]): string[] {
     cleaned.push(model);
   }
 
-  const bareModels = new Set(cleaned.filter((model) => !model.includes('/')));
+  const bareScopes = new Set(cleaned.filter((model) => !model.includes('/')));
   return cleaned.filter((model) => {
     const separator = model.lastIndexOf('/');
-    return separator < 0 || !bareModels.has(model.slice(separator + 1));
+    if (separator < 0) return true;
+    const prefix = model.slice(0, separator);
+    const base = model.slice(separator + 1);
+    // A bare model block covers every pinned route of that model, and a
+    // credential/channel scope covers every route under that prefix.
+    return !bareScopes.has(base) && !bareScopes.has(prefix);
   });
 }
