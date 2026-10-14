@@ -26,6 +26,8 @@ import { AuthFileDetailsSheet } from '@/features/authFiles/components/AuthFileDe
 import { getAuthFileRefreshKey } from '@/features/authFiles/manualRefresh';
 import { AuthFileRefreshResults } from '@/features/authFiles/components/AuthFileRefreshResults';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
+import { CredentialModelsModal } from '@/features/sharing/CredentialModelsModal';
+import type { SharedCredential } from '@/services/api/sharingCredentials';
 import { AuthFilesToolbar } from '@/features/authFiles/components/AuthFilesToolbar';
 import { BatchActionBar } from '@/features/authFiles/components/BatchActionBar';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
@@ -101,6 +103,7 @@ export function AuthFilesPage() {
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const [sharedModelsFile, setSharedModelsFile] = useState<SharedCredential | null>(null);
 
   const {
     modelsModalOpen,
@@ -727,7 +730,13 @@ export function AuthFilesPage() {
                 quotaFilterType={activeQuotaFilter}
                 statusBarCache={statusBarCache}
                 entranceDelayMs={cardEntranceDelay(index)}
-                onShowModels={showModels}
+                onShowModels={(file) => {
+                  if (account && file.manageable && file.kind !== 'provider') {
+                    setSharedModelsFile(file as SharedCredential);
+                  } else {
+                    void showModels(file);
+                  }
+                }}
                 onDownload={handleDownload}
                 onManualRefresh={handleManualRefresh}
                 onCooldownReset={handleCooldownReset}
@@ -801,6 +810,16 @@ export function AuthFilesPage() {
         </div>
       )}
 
+      {sharedModelsFile && (
+        <CredentialModelsModal
+          file={sharedModelsFile}
+          onClose={() => setSharedModelsFile(null)}
+          refresh={async () => {
+            invalidateDerivedCaches([sharedModelsFile.name]);
+            await loadFiles();
+          }}
+        />
+      )}
       <AuthFileModelsModal
         open={modelsModalOpen}
         fileName={modelsFileName}

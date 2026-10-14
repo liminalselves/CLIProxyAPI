@@ -21,6 +21,7 @@ import type { BoardMessage, Channel } from './types';
 import { DailyTrend, LoadState, PageHeader } from './shared';
 import { date, number, useSharingActions, useSharingData } from './hooks';
 import { useChannelStore } from './useChannelStore';
+import { CredentialModelsModal } from './CredentialModelsModal';
 import styles from './Sharing.module.scss';
 
 const EMPTY_STATUS_BAR_CACHE = new Map();
@@ -118,23 +119,9 @@ function ChannelCredentialCard({
             : undefined
         }
       />
-      <Modal
-        open={modelsOpen}
-        onClose={() => setModelsOpen(false)}
-        title={t('auth_files.models_button')}
-      >
-        {file.models.length === 0 ? (
-          <p className={styles.meta}>{t('sharing.no_models')}</p>
-        ) : (
-          <ul className={styles.modelList}>
-            {file.models.map((model) => (
-              <li key={model} className={styles.mono}>
-                {model}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
+      {modelsOpen && (
+        <CredentialModelsModal file={file} onClose={() => setModelsOpen(false)} refresh={refresh} />
+      )}
     </div>
   );
 }
@@ -189,7 +176,10 @@ function ChannelProviderFormModal({
 }) {
   const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
-  const formId = useMemo(() => `channel-provider-${provider ? provider.route_id : 'create'}`, [provider]);
+  const formId = useMemo(
+    () => `channel-provider-${provider ? provider.route_id : 'create'}`,
+    [provider]
+  );
   const resource = useMemo(
     () => (provider ? synthesizeProviderResource(provider) : null),
     [provider]
@@ -537,8 +527,7 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
     }
   };
 
-  const canDelete = (message: BoardMessage) =>
-    canModerate || message.author === account?.username;
+  const canDelete = (message: BoardMessage) => canModerate || message.author === account?.username;
 
   return (
     <Card className={styles.boardCard} title={t('sharing.board')}>
@@ -561,9 +550,7 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
                   onClick={() =>
                     confirm(t('sharing.delete_message_confirm'), async () => {
                       await sharingApi.deleteBoardMessage(channel.id, message.id);
-                      setMessages((current) =>
-                        current.filter((item) => item.id !== message.id)
-                      );
+                      setMessages((current) => current.filter((item) => item.id !== message.id));
                     })
                   }
                 >
@@ -735,8 +722,7 @@ export function ChannelDetailPage() {
   const channel = data?.channels.find((item) => item.id === id);
   const credentials = (data?.credentials ?? []).filter((file) => file.kind !== 'provider');
   const providers = (data?.credentials ?? []).filter((file) => file.kind === 'provider');
-  const isOwner =
-    !!channel && (channel.owner === account?.username || account?.role === 'admin');
+  const isOwner = !!channel && (channel.owner === account?.username || account?.role === 'admin');
   const canManage = isOwner || !!channel?.public;
 
   const tab = resolveTab(params.get('tab'), canManage);

@@ -2447,6 +2447,7 @@
     "no_messages": "No messages yet.",
     "no_model_options": "No model records",
     "no_models": "No matching models.",
+    "credential_models_hint": "Set an alias to rename the model used in requests without changing the channel prefix. Leave it blank to clear this credential's override and restore the original name or an existing channel alias. Keep the upstream model name unchanged.",
     "no_models_hint": "Adjust the filters, or create a channel and add credentials first.",
     "no_performance": "No call data in the last 24 hours.",
     "no_providers": "No AI providers added to this channel yet.",

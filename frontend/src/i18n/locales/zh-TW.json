@@ -2471,6 +2471,7 @@
     "no_messages": "還沒有留言。",
     "no_model_options": "暫無模型記錄",
     "no_models": "沒有符合的模型。",
+    "credential_models_hint": "填寫別名即可修改呼叫時使用的模型名稱，渠道前綴保持不變。留空可清除此憑證的改名設定，恢復原名或既有的渠道別名。上游模型名稱無需修改。",
     "no_models_hint": "調整篩選條件，或先建立渠道並新增憑證。",
     "no_performance": "最近 24 小時暫無呼叫資料。",
     "no_providers": "該渠道還沒有新增 AI 提供商。",

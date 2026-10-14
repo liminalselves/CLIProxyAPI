@@ -212,7 +212,16 @@ Publishing or withdrawing a channel updates its credential metadata and model
 registrations. Individual credentials can be disabled or removed. An optional
 `enabled_models` array selects which base model names a credential publishes;
 omitting it publishes all discovered models. An empty array publishes none.
-The console's empty model editor restores the full discovered model set.
+In the channel detail page and the credential list, a manageable subscription
+credential's **Models** dialog reuses the provider model editor. Aliases change
+the callable model name while keeping the pinned source prefix and the upstream
+model name intact. Saving writes per-credential `model_aliases` through
+`/credentials/:route_id/fields` and refreshes registration; clearing an alias
+restores the original name or an inherited channel alias, rather than disabling
+the model. Advanced alias settings and mappings for temporarily unavailable
+models are preserved. Credential summaries expose `model_definitions` (public ID
+and upstream name) and `model_aliases` only to managers, without exporting the
+credential file.
 
 Existing credential files are not silently reassigned. They remain unclaimed and
 are not shared until an administrator explicitly assigns them to a channel.

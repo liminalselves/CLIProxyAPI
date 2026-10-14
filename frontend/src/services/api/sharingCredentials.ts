@@ -22,6 +22,8 @@ export interface SharedCredential extends AuthFileItem {
   manageable: boolean;
   claimable: boolean;
   models: string[];
+  model_definitions?: { id: string; name: string }[];
+  model_aliases?: unknown;
   enabled_models?: string[];
 }
 

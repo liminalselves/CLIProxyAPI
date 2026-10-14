@@ -368,12 +368,25 @@ func (h *Handler) HubCredentials(c *gin.Context) {
 			}
 		}
 		models := make([]string, 0)
+		definitions := make([]gin.H, 0)
 		for _, m := range registry.GetGlobalRegistry().GetModelsForClient(a.ID) {
 			if m != nil {
 				models = append(models, m.ID)
+				name := m.MetadataModelID
+				if name == "" {
+					name = strings.TrimPrefix(m.ID, a.Prefix+"/")
+				}
+				definitions = append(definitions, gin.H{"id": m.ID, "name": name})
 			}
 		}
 		item["models"] = models
+		if manageable && kind != "provider" {
+			item["model_definitions"] = definitions
+			item["model_aliases"] = a.Metadata["model_aliases"]
+			if _, exists := a.Metadata["model_aliases"]; !exists {
+				item["model_aliases"] = a.Metadata["model-aliases"]
+			}
+		}
 		if enabled, ok := a.Metadata["enabled_models"]; ok {
 			item["enabled_models"] = enabled
 		}

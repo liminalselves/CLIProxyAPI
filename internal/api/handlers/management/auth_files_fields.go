@@ -615,6 +615,13 @@ func syncAuthFileMetadataFields(auth *coreauth.Auth, touchedRoots map[string]str
 			auth.ProxyURL = strings.TrimSpace(proxyURL)
 		}
 	}
+	if _, ok := touchedRoots["model_aliases"]; ok {
+		delete(auth.Attributes, "model_aliases")
+		if raw, errMarshal := json.Marshal(auth.Metadata["model_aliases"]); errMarshal == nil {
+			aliases := coreauth.OAuthModelAliasesFromAttributes(map[string]string{"model_aliases": string(raw)})
+			coreauth.SetOAuthModelAliasesAttribute(auth, aliases)
+		}
+	}
 	if _, ok := touchedRoots["headers"]; ok {
 		syncAuthFileHeaderAttributes(auth)
 	}

@@ -11,6 +11,7 @@ interface ModelEntriesEditorProps {
   models: ModelEntryInput[];
   /** Restrict advanced controls to the OAuthModelAlias contract. */
   oauthAliasOnly?: boolean;
+  aliasRequired?: boolean;
   providerBrand?: ProviderBrand;
   /** Only OpenAI-compatible entries can expose the image-generation capability. */
   supportsImage: boolean;
@@ -26,6 +27,7 @@ interface ModelEntriesEditorProps {
 export function ModelEntriesEditor({
   models,
   oauthAliasOnly = false,
+  aliasRequired = oauthAliasOnly,
   providerBrand = 'gemini',
   supportsImage,
   supportsThinking,
@@ -85,7 +87,7 @@ export function ModelEntriesEditor({
                     ? 'auth_files.policy_alias_name'
                     : 'providersPage.modelOptions.modelAlias'
                 )}
-                required={oauthAliasOnly}
+                required={aliasRequired}
                 value={entry.alias ?? ''}
                 onChange={(e) => onUpdate(idx, { alias: e.target.value })}
                 disabled={mutating}

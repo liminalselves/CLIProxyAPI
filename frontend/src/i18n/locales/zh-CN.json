@@ -2445,6 +2445,7 @@
     "no_messages": "还没有留言。",
     "no_model_options": "暂无模型记录",
     "no_models": "没有匹配的模型。",
+    "credential_models_hint": "填写别名即可修改调用时使用的模型名，渠道前缀保持不变。留空可清除此凭证的改名设置，恢复原名或已有的渠道别名。上游模型名称无需修改。",
     "no_models_hint": "调整筛选条件，或先创建渠道并添加凭证。",
     "no_performance": "最近 24 小时暂无调用数据。",
     "no_providers": "该渠道还没有添加 AI 提供商。",
