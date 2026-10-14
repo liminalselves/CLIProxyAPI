@@ -97,6 +97,25 @@ func excludeExecutionProvider(providers []string, excluded string) []string {
 	return out
 }
 
+// mergeProviderList appends providers missing from base while preserving order.
+func mergeProviderList(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base)+len(extra))
+	for _, provider := range base {
+		seen[provider] = struct{}{}
+	}
+	for _, provider := range extra {
+		if _, ok := seen[provider]; ok {
+			continue
+		}
+		seen[provider] = struct{}{}
+		base = append(base, provider)
+	}
+	return base
+}
+
 func (h *BaseAPIHandler) getRequestDetails(modelName string) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
 	return h.getRequestDetailsWithOptions(modelName, false, false)
 }
@@ -202,9 +221,12 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowIma
 		providers = util.GetProviderName(resolvedModelName)
 	}
 	// Bare base model names in multi-user mode are registered only under channel
-	// prefixes, so resolve their providers from the credentials publishing them.
-	if len(providers) == 0 && allowBareModel && h != nil && h.AuthManager != nil {
-		providers = h.AuthManager.ProvidersForBaseModel(baseModel)
+	// prefixes and may be served by credentials of any provider kind. Merge the
+	// executor keys of every published credential serving the base model: the
+	// catalog lookup above only names the model's native provider, which would
+	// silently drop channels backed by other provider kinds (e.g. openai-compatible).
+	if allowBareModel && h != nil && h.AuthManager != nil && !strings.Contains(baseModel, "/") {
+		providers = mergeProviderList(providers, h.AuthManager.ProvidersForBaseModel(baseModel))
 	}
 
 	if len(providers) == 0 {

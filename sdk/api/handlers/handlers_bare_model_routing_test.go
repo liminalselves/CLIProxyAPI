@@ -72,6 +72,66 @@ func TestGetRequestDetailsChannelModeBareModel(t *testing.T) {
 	}
 }
 
+// Regression test: a bare model present in the global catalog resolves to its
+// native provider via GetProviderName, which previously returned early and
+// silently dropped channels backed by other provider kinds (openai-compatible
+// credentials get per-channel executor keys like openai-compatible-hub-*).
+func TestGetRequestDetailsBareModelMergesCompatChannels(t *testing.T) {
+	manager := coreauth.NewManager(nil, nil, nil)
+	manager.SetConfig(&internalconfig.Config{MultiUser: internalconfig.MultiUserConfig{Enabled: true}})
+
+	codexAuth := &coreauth.Auth{
+		ID:       "bare-merge-codex",
+		Provider: "codex",
+		Prefix:   "miqi-codex#1",
+		Status:   coreauth.StatusActive,
+		Metadata: map[string]any{"owner": "alice", "channel_id": "ch1", "published": true},
+	}
+	compatAuth := &coreauth.Auth{
+		ID:         "bare-merge-compat",
+		Provider:   "openai-compatible",
+		Prefix:     "573-codex#1",
+		Attributes: map[string]string{"compat_name": "hub-ch2-x"},
+		Status:     coreauth.StatusActive,
+		Metadata:   map[string]any{"owner": "bob", "channel_id": "ch2", "published": true},
+	}
+	for _, auth := range []*coreauth.Auth{codexAuth, compatAuth} {
+		if _, err := manager.Register(context.Background(), auth); err != nil {
+			t.Fatalf("register auth %s: %v", auth.ID, err)
+		}
+	}
+
+	reg := registry.GetGlobalRegistry()
+	// Simulate the global catalog: the bare model resolves natively to codex.
+	reg.RegisterClient("catalog-sol", "codex", []*registry.ModelInfo{{ID: "shared-sol"}})
+	reg.RegisterClient(codexAuth.ID, "codex", []*registry.ModelInfo{{ID: "miqi-codex#1/shared-sol"}})
+	reg.RegisterClient(compatAuth.ID, "openai-compatible-hub-ch2-x", []*registry.ModelInfo{{ID: "573-codex#1/shared-sol"}})
+	defer func() {
+		reg.UnregisterClient("catalog-sol")
+		reg.UnregisterClient(codexAuth.ID)
+		reg.UnregisterClient(compatAuth.ID)
+	}()
+
+	handler := &BaseAPIHandler{
+		Cfg:         &sdkconfig.SDKConfig{RequireChannelModel: true},
+		AuthManager: manager,
+	}
+
+	providers, _, errMsg := handler.getRequestDetailsWithOptions("shared-sol", false, true)
+	if errMsg != nil {
+		t.Fatalf("bare model with grant: %v", errMsg.Error)
+	}
+	want := map[string]bool{"codex": true, "openai-compatible-hub-ch2-x": true}
+	if len(providers) != len(want) {
+		t.Fatalf("providers = %v, want both codex and openai-compatible-hub-ch2-x", providers)
+	}
+	for _, provider := range providers {
+		if !want[provider] {
+			t.Fatalf("providers = %v, unexpected provider %q", providers, provider)
+		}
+	}
+}
+
 func TestBareModelsAllowedContextFlag(t *testing.T) {
 	if coreauth.BareModelsAllowed(nil) {
 		t.Fatal("nil context must not allow bare models")
