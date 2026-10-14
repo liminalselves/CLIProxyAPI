@@ -137,9 +137,13 @@ describe('grouped marketplace listing', () => {
     expect(url.searchParams.get('model')).toBe(selected.id);
   });
 
-  test('card title is the base model; every channel gets its own copy line', () => {
+  test('card title copies the base model; every channel gets its own copy line', () => {
     const markup = render([route(), bob]);
-    expect(markup.match(/<h2[^>]*>kimi-k2<\/h2>/g)).toHaveLength(1);
+    const title = markup.match(
+      /<h2[^>]*>(<button[^>]*title="Copy model name"[^>]*>[\s\S]*?<\/button>)<\/h2>/g
+    );
+    expect(title).toHaveLength(1);
+    expect(title![0]).toContain('kimi-k2');
     expect(markup).toContain('<code>alice-kimi/kimi-k2</code>');
     expect(markup).toContain('<code>bob-kimi/kimi-k2</code>');
     expect(markup).toContain('Details');

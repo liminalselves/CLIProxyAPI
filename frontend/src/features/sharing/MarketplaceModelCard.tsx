@@ -51,7 +51,17 @@ export function MarketplaceModelCard({
             <span className={styles.marketplaceIcon} aria-hidden="true">
               <IconModelCluster size={18} />
             </span>
-            <h2 id={titleID}>{group.baseModel}</h2>
+            <h2 id={titleID}>
+              <button
+                type="button"
+                className={styles.titleCopy}
+                title={t('sharing.copy_model')}
+                onClick={() => void onCopy(group.baseModel)}
+              >
+                <span className={styles.titleCopyText}>{group.baseModel}</span>
+                <IconCopy size={14} />
+              </button>
+            </h2>
           </div>
         }
         extra={
