@@ -94,6 +94,7 @@ export function PageTransition({
   const currentLayerKey = currentLayer?.key ?? location.key;
   const currentLayerPathname = currentLayer?.location.pathname;
   const currentLayerSearch = currentLayer?.location.search;
+  const currentLayerHash = currentLayer?.location.hash;
 
   const resolveScrollContainer = useCallback(() => {
     if (scrollContainerRef?.current) return scrollContainerRef.current;
@@ -103,10 +104,13 @@ export function PageTransition({
 
   useLayoutEffect(() => {
     if (isAnimating) return;
+    // The current layer keeps its original key across same-path updates, so
+    // the key must not participate in this guard — requiring it would re-enter
+    // the same-path branch forever (React #185). Compare rendered parts only.
     if (
-      location.key === currentLayerKey &&
       currentLayerPathname === location.pathname &&
-      currentLayerSearch === location.search
+      currentLayerSearch === location.search &&
+      currentLayerHash === location.hash
     )
       return;
     if (currentLayerPathname === location.pathname) {
@@ -232,6 +236,7 @@ export function PageTransition({
     currentLayerKey,
     currentLayerPathname,
     currentLayerSearch,
+    currentLayerHash,
     getRouteOrder,
     getTransitionVariant,
     resolveScrollContainer,
