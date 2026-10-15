@@ -58,6 +58,9 @@ const channelTarget = (file: AuthFileItem): { id: string; name: string } | null 
   return { id, name };
 };
 
+const entryKey = (entry: QuotaFileEntry): string =>
+  `${entry.type}:${getQuotaCacheKey(entry.file)}`;
+
 function ExpiringCard({
   item,
   resolvedTheme,
@@ -242,20 +245,79 @@ export function ExpiringQuotaPage() {
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
   const autoLoadRef = useRef(0);
+  /* Provider groups land one by one; revealing each as it arrives makes cards
+     pop in individually. settledVersion flips only when the whole batch is
+     done, so the skeleton holds until the grid can render in one pass. */
+  const [settledVersion, setSettledVersion] = useState(0);
+  const batchWatchRef = useRef<{ version: number; active: boolean }>({
+    version: 0,
+    active: false,
+  });
   useEffect(() => {
     if (loading || error || filesGeneration !== sessionGeneration) return;
     if (autoLoadRef.current === listVersion) return;
     autoLoadRef.current = listVersion;
-    if (entries.length > 0) void loadQuota(entries);
+    if (entries.length === 0) {
+      setSettledVersion(listVersion);
+      return;
+    }
+    batchWatchRef.current = { version: listVersion, active: true };
+    void loadQuota(entries);
   }, [entries, error, filesGeneration, listVersion, loadQuota, loading, sessionGeneration]);
+
+  useEffect(() => {
+    const watch = batchWatchRef.current;
+    if (!watch.active || batchLoading) return;
+    watch.active = false;
+    setSettledVersion(watch.version);
+  }, [batchLoading]);
 
   /* ---------- Expiring rows ---------- */
 
   const now = useNow(true);
-  const displayed = useMemo(
-    () => buildExpiringEntries(entries, getQuota, now),
-    [entries, getQuota, now]
-  );
+  const fresh = useMemo(() => buildExpiringEntries(entries, getQuota, now), [entries, getQuota, now]);
+
+  /* A refresh replaces the credential's quota state with a bare loading one,
+     so its expiring rows vanish until the fetch lands — the card would blink
+     out and pop back. Remember each card's soonest reset and keep rendering it
+     while a refresh is in flight; only fresh success data (or a passed reset)
+     may drop a card. The card body reads live store data, so only the sort
+     key needs remembering. */
+  const [soonestByKey, setSoonestByKey] = useState<ReadonlyMap<string, number>>(() => new Map());
+  useEffect(() => {
+    setSoonestByKey((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      fresh.forEach((item) => {
+        const key = entryKey(item.entry);
+        if (next.get(key) !== item.soonestAtMs) {
+          next.set(key, item.soonestAtMs);
+          changed = true;
+        }
+      });
+      const listed = new Set(entries.map(entryKey));
+      next.forEach((_, key) => {
+        if (!listed.has(key)) {
+          next.delete(key);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [fresh, entries]);
+
+  const displayed = useMemo(() => {
+    const merged = new Map<string, ExpiringQuotaEntry>();
+    fresh.forEach((item) => merged.set(entryKey(item.entry), item));
+    entries.forEach((entry) => {
+      const key = entryKey(entry);
+      if (merged.has(key) || getQuota(entry)?.status === 'success') return;
+      const soonestAtMs = soonestByKey.get(key);
+      if (soonestAtMs === undefined || soonestAtMs <= now) return;
+      merged.set(key, { entry, rows: [], soonestAtMs });
+    });
+    return Array.from(merged.values()).sort((a, b) => a.soonestAtMs - b.soonestAtMs);
+  }, [fresh, entries, getQuota, now, soonestByKey]);
 
   const { pendingCount, failedCount } = useMemo(() => {
     let pending = 0;
@@ -270,9 +332,10 @@ export function ExpiringQuotaPage() {
 
   const refreshing = loading || batchLoading;
   const disableControls = connectionStatus !== 'connected';
+  const batchSettled = settledVersion === listVersion;
   const showSkeleton =
-    loading || (displayed.length === 0 && pendingCount > 0 && entries.length > 0);
-  const showEmpty = !loading && !error && displayed.length === 0 && pendingCount === 0;
+    loading || (displayed.length === 0 && entries.length > 0 && !batchSettled);
+  const showEmpty = !loading && !error && displayed.length === 0 && batchSettled;
 
   /* First batch of visible cards captures its staggered entrance once; cards
      mounted by late-arriving quota get null — refreshes must not replay it. */
@@ -300,7 +363,7 @@ export function ExpiringQuotaPage() {
             disabled={disableControls || refreshing}
           >
             <IconRefreshCw size={14} className={refreshing ? styles.spinning : undefined} />
-            {t('quota_management.refresh_all')}
+            {t('quota_management.refresh_all_credentials')}
           </Button>
         }
       />
@@ -334,7 +397,7 @@ export function ExpiringQuotaPage() {
         <div className={styles.grid}>
           {displayed.map((item, index) => (
             <ExpiringCard
-              key={`${item.entry.type}:${getQuotaCacheKey(item.entry.file)}`}
+              key={entryKey(item.entry)}
               item={item}
               resolvedTheme={resolvedTheme}
               now={now}
