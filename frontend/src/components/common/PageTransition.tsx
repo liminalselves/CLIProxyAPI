@@ -110,9 +110,12 @@ export function PageTransition({
     )
       return;
     if (currentLayerPathname === location.pathname) {
+      // Same-path navigation (e.g. tab query switches): update the location in
+      // place but keep the layer key, otherwise the keyed layer remounts the
+      // whole page subtree and every tab click becomes a full reload.
       setLayers((current) =>
         current.map((layer) =>
-          layer.status === 'current' ? { ...layer, key: location.key, location } : layer
+          layer.status === 'current' ? { ...layer, location } : layer
         )
       );
       return;
