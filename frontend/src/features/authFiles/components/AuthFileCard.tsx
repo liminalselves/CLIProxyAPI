@@ -97,6 +97,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const showUtilityActions =
     !isRuntimeOnly &&
     Boolean(showManualRefreshButton || onDownload || onOpenPrefixProxyEditor || onDelete);
+  /* Callback-less usages (e.g. the expiring-quota page) would otherwise render
+     a bare bordered footer strip. */
+  const hasFooterActions =
+    (showModelsButton && Boolean(onShowModels)) ||
+    showUtilityActions ||
+    (!isRuntimeOnly && Boolean(onToggleStatus));
   const isManualRefreshing = manualRefreshing[getAuthFileRefreshKey(file)] === true;
   const typeLabel = getTypeLabel(t, providerKey);
   const typeColor = getTypeColor(providerKey, resolvedTheme);
@@ -257,6 +263,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
         <AuthFileQuotaSection file={file} quotaType={quotaType} disableControls={disableControls} />
       )}
 
+      {hasFooterActions && (
       <footer className={styles.actions}>
         <div className={styles.actionsMain}>
           {showModelsButton && onShowModels && (
@@ -349,6 +356,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
           </div>
         )}
       </footer>
+      )}
     </article>
   );
 }

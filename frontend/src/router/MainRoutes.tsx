@@ -16,6 +16,7 @@ import { ThemePage } from '@/pages/ThemePage';
 import { useAuthStore } from '@/stores';
 import { SharingDashboard } from '@/features/sharing/SharingDashboard';
 import { MarketplacePage } from '@/features/sharing/MarketplacePage';
+import { ExpiringQuotaPage } from '@/features/quota/ExpiringQuotaPage';
 import { ChannelsPage } from '@/features/sharing/ChannelsPage';
 import { ChannelDetailPage } from '@/features/sharing/ChannelDetailPage';
 import { KeysPage } from '@/features/sharing/KeysPage';
@@ -65,6 +66,7 @@ export function MainRoutes({ location }: { location?: Location }) {
         { path: '/', element: <SharingDashboard /> },
         { path: '/dashboard', element: <SharingDashboard /> },
         { path: '/marketplace', element: <MarketplacePage /> },
+        { path: '/quota-expiry', element: <ExpiringQuotaPage /> },
         { path: '/channels', element: <ChannelsPage /> },
         { path: '/channels/:id', element: <ChannelDetailPage /> },
         { path: '/auth-files', element: <AuthFilesPage /> },

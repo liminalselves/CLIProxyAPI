@@ -31,6 +31,7 @@ import {
   IconSidebarSystem,
   IconSidebarTheme,
   IconChevronDown,
+  IconTimer,
 } from '@/components/ui/icons';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import {
@@ -727,6 +728,11 @@ export function MainLayout() {
       items: [
         { path: '/', labelKey: 'nav.dashboard', icon: sidebarIcons.dashboard },
         { path: '/marketplace', labelKey: 'sharing.marketplace', icon: sidebarIcons.aiProviders },
+        {
+          path: '/quota-expiry',
+          labelKey: 'sharing.quota_expiry',
+          icon: <IconTimer size={18} />,
+        },
       ],
     },
     {
