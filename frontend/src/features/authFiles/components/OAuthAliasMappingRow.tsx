@@ -2,7 +2,6 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { Button } from '@/components/ui/Button';
-import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconTrash2 } from '@/components/ui/icons';
 import type { OAuthModelAliasEntry } from '@/types';
 import styles from './OAuthEditor.module.scss';
@@ -13,7 +12,7 @@ interface OAuthAliasMappingRowProps {
   options: { value: string; label?: string }[];
   disabled: boolean;
   canRemove: boolean;
-  onChange: (field: keyof OAuthModelAliasEntry, value: string | boolean) => void;
+  onChange: (field: keyof OAuthModelAliasEntry, value: string) => void;
   onRemove: () => void;
 }
 
@@ -64,26 +63,17 @@ export function OAuthAliasMappingRow({
           />
         </div>
       </div>
-      <div className={styles.mappingFooter}>
-        <ToggleSwitch
-          label={t('oauth_model_alias.alias_fork_label')}
-          labelPosition="left"
-          checked={Boolean(entry.fork)}
-          onChange={(value) => onChange('fork', value)}
-          disabled={disabled}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          className={styles.removeMapping}
-          onClick={onRemove}
-          disabled={disabled || !canRemove}
-          title={t('oauth_model_alias.remove_mapping', { number: index + 1 })}
-          aria-label={t('oauth_model_alias.remove_mapping', { number: index + 1 })}
-        >
-          <IconTrash2 size={15} aria-hidden="true" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={styles.removeMapping}
+        onClick={onRemove}
+        disabled={disabled || !canRemove}
+        title={t('oauth_model_alias.remove_mapping', { number: index + 1 })}
+        aria-label={t('oauth_model_alias.remove_mapping', { number: index + 1 })}
+      >
+        <IconTrash2 size={15} aria-hidden="true" />
+      </Button>
     </div>
   );
 }

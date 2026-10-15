@@ -9,7 +9,7 @@ export interface SourceNode {
   id: string; // unique: provider::name
   provider: string;
   name: string;
-  aliases: { alias: string; fork: boolean }[]; // all aliases this source maps to
+  aliases: { alias: string }[]; // all aliases this source maps to
 }
 
 export interface AliasNode {

@@ -939,14 +939,28 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
+  align-items: end;
 
   @media (max-width: 520px) {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
 
-    input:first-child {
-      grid-column: 1 / -1;
+    .modelEntryActions {
+      justify-content: flex-end;
     }
   }
+}
+
+.modelAliasField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.modelAliasLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .modelEntry {

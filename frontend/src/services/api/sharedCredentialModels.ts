@@ -41,13 +41,7 @@ export function buildSharedCredentialModelAliases(rows: SharedCredentialModelDra
       (row) =>
         row.alias &&
         row.alias !== row.name &&
-        !(
-          row.inherited?.name === row.name &&
-          row.inherited.alias === row.alias &&
-          row.fork === undefined &&
-          row.displayName === undefined &&
-          row.forceMapping === undefined
-        )
+        !(row.inherited?.name === row.name && row.inherited.alias === row.alias)
     );
   const seen = new Set<string>();
   for (const row of aliases) {

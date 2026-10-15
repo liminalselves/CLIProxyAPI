@@ -56,7 +56,7 @@ func TestHubCredentialModelAliases(t *testing.T) {
 		h.HubPatchCredentialFields(c)
 		return w
 	}
-	body := `{"model_aliases":[{"name":"gpt-5","alias":"my-gpt","fork":false,"display-name":"My GPT","force-mapping":true}]}`
+	body := `{"model_aliases":[{"name":"gpt-5","alias":"my-gpt"}]}`
 	if w := patch(multiuser.User{Username: "bob", Role: "member"}, body); w.Code != 403 {
 		t.Fatalf("non-manager alias edit: %d %s", w.Code, w.Body.String())
 	}
@@ -67,7 +67,7 @@ func TestHubCredentialModelAliases(t *testing.T) {
 		t.Fatal("alias edit did not refresh runtime registration")
 	}
 	aliases := coreauth.OAuthModelAliasesFromAttributes(hooked.Attributes)
-	if len(aliases) != 1 || aliases[0].Name != "gpt-5" || aliases[0].Alias != "my-gpt" || !aliases[0].ForceMapping || aliases[0].Fork {
+	if len(aliases) != 1 || aliases[0].Name != "gpt-5" || aliases[0].Alias != "my-gpt" {
 		t.Fatalf("runtime alias settings: %#v", aliases)
 	}
 	persisted, err := os.ReadFile(path)

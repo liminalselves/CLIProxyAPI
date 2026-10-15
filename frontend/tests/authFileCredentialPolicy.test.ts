@@ -22,9 +22,6 @@ const aliases = [
   {
     name: 'upstream',
     alias: 'public',
-    fork: true,
-    'force-mapping': true,
-    'display-name': 'Example',
   },
 ];
 const rules = [
@@ -55,9 +52,6 @@ describe('auth-file structured credential policy contracts', () => {
     expect(alternate.modelAliases.rows?.[0]).toMatchObject({
       name: 'upstream',
       alias: 'public',
-      displayName: 'Example',
-      fork: true,
-      forceMapping: true,
     });
     expect(alternate.errorRules.rows?.[0]).toMatchObject({
       status: '429',
@@ -185,7 +179,7 @@ describe('auth-file structured credential policy contracts', () => {
     ).toEqual({ request_scoped_errors: [] });
   });
 
-  test('editing known options retains extension fields and explicit false on existing rows', () => {
+  test('editing known options retains extension fields and strips deprecated alias keys', () => {
     const original = {
       model_aliases: [
         { ...aliases[0], fork: false, 'force-mapping': false, future: { keep: true } },
@@ -201,7 +195,9 @@ describe('auth-file structured credential policy contracts', () => {
         original,
         changed(original, 'modelAliases', { mode: 'custom', rows: aliasRows })
       )
-    ).toEqual({ model_aliases: [{ ...original.model_aliases[0], alias: 'renamed' }] });
+    ).toEqual({
+      model_aliases: [{ name: 'upstream', alias: 'renamed', future: { keep: true } }],
+    });
     const ruleRows = initial.errorRules.rows!.map((row) => ({ ...row, status: '503' }));
     expect(
       buildCredentialPolicyPatch(

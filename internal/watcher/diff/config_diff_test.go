@@ -307,22 +307,6 @@ func TestBuildConfigChangeDetails_XAIKeys(t *testing.T) {
 	expectContains(t, changes, "xai[0].excluded-models: updated (1 -> 1 entries)")
 }
 
-func TestBuildConfigChangeDetails_XAIForceMappingOnly(t *testing.T) {
-	oldCfg := &config.Config{XAIKey: []config.XAIKey{{
-		APIKey:  "xai-key",
-		BaseURL: "https://api.x.ai/v1",
-		Models:  []config.XAIModel{{Name: "grok-4.5", Alias: "grok-latest"}},
-	}}}
-	newCfg := &config.Config{XAIKey: []config.XAIKey{{
-		APIKey:  "xai-key",
-		BaseURL: "https://api.x.ai/v1",
-		Models:  []config.XAIModel{{Name: "grok-4.5", Alias: "grok-latest", ForceMapping: true}},
-	}}}
-
-	changes := BuildConfigChangeDetails(oldCfg, newCfg)
-	expectContains(t, changes, "xai[0].models: updated (1 -> 1 entries)")
-}
-
 func TestBuildConfigChangeDetails_NilSafe(t *testing.T) {
 	if details := BuildConfigChangeDetails(nil, &config.Config{}); len(details) != 0 {
 		t.Fatalf("expected empty change list when old nil, got %v", details)

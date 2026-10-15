@@ -2,7 +2,6 @@ import type { ModelAlias } from '@/types/provider';
 import { isRecord } from '@/utils/helpers';
 
 const MODEL_BOOLEAN_FIELDS = [
-  ['forceMapping', 'force-mapping'],
   ['isCompat', 'is-compat'],
   ['supportConfigurationUpdate', 'support-configuration-update'],
   ['useMaxCompletionTokens', 'use-max-completion-tokens'],
@@ -10,7 +9,6 @@ const MODEL_BOOLEAN_FIELDS = [
 
 export function normalizeModelOptions(raw: Record<string, unknown>): Partial<ModelAlias> {
   const result: Partial<ModelAlias> = {};
-  if (typeof raw['display-name'] === 'string') result.displayName = raw['display-name'];
   const context = raw['max-context-length'];
   if (typeof context === 'number' && Number.isSafeInteger(context))
     result.maxContextLength = context;
@@ -65,11 +63,10 @@ export function serializeModelOptions(
   vertex = false
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  if (model.displayName !== undefined) result['display-name'] = model.displayName;
   if (!vertex && model.maxContextLength !== undefined)
     result['max-context-length'] = model.maxContextLength;
   for (const [key, wire] of MODEL_BOOLEAN_FIELDS) {
-    if (vertex && key !== 'forceMapping') continue;
+    if (vertex) continue;
     if (!openai && key === 'useMaxCompletionTokens') continue;
     if (model[key] !== undefined) result[wire] = model[key];
   }

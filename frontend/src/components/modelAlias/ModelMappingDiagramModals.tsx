@@ -3,7 +3,6 @@ import type { TFunction } from 'i18next';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconTrash2 } from '@/components/ui/icons';
 import type { AliasNode, SourceNode } from './ModelMappingDiagramTypes';
 import styles from './ModelMappingDiagram.module.scss';
@@ -112,7 +111,6 @@ interface SettingsAliasModalProps {
   alias: string | null;
   aliasNodes: AliasNode[];
   onClose: () => void;
-  onToggleFork: (provider: string, sourceModel: string, alias: string, fork: boolean) => void;
   onUnlink: (provider: string, sourceModel: string, alias: string) => void;
 }
 
@@ -122,7 +120,6 @@ export function SettingsAliasModal({
   alias,
   aliasNodes,
   onClose,
-  onToggleFork,
   onUnlink,
 }: SettingsAliasModalProps) {
   return (
@@ -150,8 +147,6 @@ export function SettingsAliasModal({
             return (
               <div className={styles.settingsList}>
                 {node.sources.map((source) => {
-                  const entry = source.aliases.find((item) => item.alias === alias);
-                  const forkEnabled = entry?.fork === true;
                   return (
                     <div key={source.id} className={styles.settingsRow}>
                       <div className={styles.settingsNames}>
@@ -160,16 +155,6 @@ export function SettingsAliasModal({
                         <span className={styles.settingsAlias}>{alias}</span>
                       </div>
                       <div className={styles.settingsActions}>
-                        <span className={styles.settingsLabel}>
-                          {t('oauth_model_alias.alias_fork_label')}
-                        </span>
-                        <ToggleSwitch
-                          checked={forkEnabled}
-                          onChange={(value) =>
-                            onToggleFork(source.provider, source.name, alias, value)
-                          }
-                          ariaLabel={t('oauth_model_alias.alias_fork_label')}
-                        />
                         <button
                           type="button"
                           className={styles.settingsDelete}
@@ -202,7 +187,6 @@ interface SettingsSourceModalProps {
   t: TFunction;
   source: SourceNode | null;
   onClose: () => void;
-  onToggleFork: (provider: string, sourceModel: string, alias: string, fork: boolean) => void;
   onUnlink: (provider: string, sourceModel: string, alias: string) => void;
 }
 
@@ -211,7 +195,6 @@ export function SettingsSourceModal({
   t,
   source,
   onClose,
-  onToggleFork,
   onUnlink,
 }: SettingsSourceModalProps) {
   return (
@@ -241,16 +224,6 @@ export function SettingsSourceModal({
                   <span className={styles.settingsAlias}>{entry.alias}</span>
                 </div>
                 <div className={styles.settingsActions}>
-                  <span className={styles.settingsLabel}>
-                    {t('oauth_model_alias.alias_fork_label')}
-                  </span>
-                  <ToggleSwitch
-                    checked={entry.fork === true}
-                    onChange={(value) =>
-                      onToggleFork(source.provider, source.name, entry.alias, value)
-                    }
-                    ariaLabel={t('oauth_model_alias.alias_fork_label')}
-                  />
                   <button
                     type="button"
                     className={styles.settingsDelete}

@@ -22,9 +22,7 @@ function backend(family: ProviderFamily, group: Record<string, unknown>) {
 const rawModel = {
   name: 'fixture-model',
   alias: 'fixture-alias',
-  'display-name': 'Fixture Model',
   'max-context-length': 32768,
-  'force-mapping': true,
   'is-compat': true,
   'support-configuration-update': false,
   thinking: {
@@ -40,9 +38,7 @@ test('normalizes model attributes and converts v8 YAML thinking flags at the API
     { name: 'fixture', keys: [{ 'api-key': 'fixture-key', models: [rawModel] }] },
   ])[0] as ProviderKeyConfig;
   expect(config.models?.[0]).toMatchObject({
-    displayName: 'Fixture Model',
     maxContextLength: 32768,
-    forceMapping: true,
     isCompat: true,
     supportConfigurationUpdate: false,
     thinking: {
@@ -84,9 +80,7 @@ test.each(['gemini', 'interactions', 'claude', 'codex', 'meta', 'xai'] as const)
       models: [
         {
           ...current.models![0],
-          displayName: undefined,
           maxContextLength: 0,
-          forceMapping: false,
           isCompat: false,
         },
       ],
@@ -94,10 +88,8 @@ test.each(['gemini', 'interactions', 'claude', 'codex', 'meta', 'xai'] as const)
     const model = (
       (stored().keys as Record<string, unknown>[])[0].models as Record<string, unknown>[]
     )[0];
-    expect(model).not.toHaveProperty('display-name');
     expect(model).toMatchObject({
       'max-context-length': 0,
-      'force-mapping': false,
       'is-compat': false,
       thinking: rawModel.thinking,
     });
@@ -114,8 +106,6 @@ test('Vertex serializes only supported model attributes with canonical thinking 
     models: [
       {
         ...config.models![0],
-        displayName: 'Vertex',
-        forceMapping: true,
         maxContextLength: 100,
         isCompat: true,
         thinking: { zero_allowed: true, dynamic_allowed: false },
@@ -125,8 +115,6 @@ test('Vertex serializes only supported model attributes with canonical thinking 
   expect(((stored().keys as Record<string, unknown>[])[0].models as unknown[])[0]).toEqual({
     name: 'm',
     alias: 'alias',
-    'display-name': 'Vertex',
-    'force-mapping': true,
     thinking: { 'zero-allowed': true, 'dynamic-allowed': false },
   });
 });

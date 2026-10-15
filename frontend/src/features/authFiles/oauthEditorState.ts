@@ -4,8 +4,6 @@ type ModelAliasDraftEntry = {
   id?: string;
   name?: string;
   alias?: string;
-  fork?: boolean;
-  forceMapping?: boolean;
 };
 
 export const getStringSetSignature = (values: Iterable<string>): string =>
@@ -21,16 +19,8 @@ export const getModelAliasDraftSignature = (entries: ModelAliasDraftEntry[]): st
       .map((entry) => ({
         name: entry.name ?? '',
         alias: entry.alias ?? '',
-        fork: entry.fork === true,
-        forceMapping: typeof entry.forceMapping === 'boolean' ? entry.forceMapping : undefined,
       }))
-      .filter(
-        (entry) =>
-          entry.name !== '' ||
-          entry.alias !== '' ||
-          entry.fork !== true ||
-          entry.forceMapping !== undefined
-      )
+      .filter((entry) => entry.name !== '' || entry.alias !== '')
   );
 
 export const isOAuthEditorDirty = (

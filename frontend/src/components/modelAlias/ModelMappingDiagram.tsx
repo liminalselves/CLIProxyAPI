@@ -36,7 +36,6 @@ export interface ModelMappingDiagramProps {
   allProviderModels?: Record<string, AuthFileModelItem[]>;
   onUpdate?: (provider: string, sourceModel: string, newAlias: string) => void;
   onDeleteLink?: (provider: string, sourceModel: string, alias: string) => void;
-  onToggleFork?: (provider: string, sourceModel: string, alias: string, fork: boolean) => void;
   onRenameAlias?: (oldAlias: string, newAlias: string) => void;
   onDeleteAlias?: (alias: string) => void;
   onEditProvider?: (provider: string) => void;
@@ -72,7 +71,6 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
       allProviderModels = {},
       onUpdate,
       onDeleteLink,
-      onToggleFork,
       onRenameAlias,
       onDeleteAlias,
       onEditProvider,
@@ -117,7 +115,7 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
     const { aliasNodes, providerNodes } = useMemo(() => {
       const sourceMap = new Map<
         string,
-        { provider: string; name: string; aliases: Map<string, boolean> }
+        { provider: string; name: string; aliases: Set<string> }
       >();
       const aliasSet = new Set<string>();
 
@@ -130,9 +128,9 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
 
           const pk = `${provider.toLowerCase()}::${name.toLowerCase()}`;
           if (!sourceMap.has(pk)) {
-            sourceMap.set(pk, { provider, name, aliases: new Map() });
+            sourceMap.set(pk, { provider, name, aliases: new Set() });
           }
-          sourceMap.get(pk)!.aliases.set(alias, m?.fork === true);
+          sourceMap.get(pk)!.aliases.add(alias);
           aliasSet.add(alias);
         });
       });
@@ -147,7 +145,7 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
             // Already in sourceMap from mappings; keep provider from mapping for correct grouping.
             return;
           }
-          sourceMap.set(pk, { provider, name, aliases: new Map() });
+          sourceMap.set(pk, { provider, name, aliases: new Set() });
         });
       });
 
@@ -157,7 +155,7 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
           id,
           provider: v.provider,
           name: v.name,
-          aliases: Array.from(v.aliases.entries()).map(([alias, fork]) => ({ alias, fork })),
+          aliases: Array.from(v.aliases).map((alias) => ({ alias })),
         }))
         .sort((a, b) => {
           if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
@@ -468,15 +466,6 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
       if (onDeleteLink) onDeleteLink(provider, sourceModel, alias);
     };
 
-    const handleToggleFork = (
-      provider: string,
-      sourceModel: string,
-      alias: string,
-      value: boolean
-    ) => {
-      if (onToggleFork) onToggleFork(provider, sourceModel, alias, value);
-    };
-
     const handleAddAlias = () => {
       closeContextMenu();
       setAddAliasOpen(true);
@@ -683,7 +672,6 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
           alias={settingsAlias}
           aliasNodes={aliasNodes}
           onClose={() => setSettingsAlias(null)}
-          onToggleFork={handleToggleFork}
           onUnlink={handleUnlinkSource}
         />
         <SettingsSourceModal
@@ -691,7 +679,6 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
           t={t}
           source={resolveSourceById(settingsSourceId)}
           onClose={() => setSettingsSourceId(null)}
-          onToggleFork={handleToggleFork}
           onUnlink={handleUnlinkSource}
         />
       </div>

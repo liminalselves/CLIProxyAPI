@@ -768,7 +768,6 @@ func matchWildcard(pattern, value string) bool {
 type modelEntry interface {
 	GetName() string
 	GetAlias() string
-	GetDisplayName() string
 	GetThinking() *registry.ThinkingSupport
 }
 
@@ -789,10 +788,7 @@ func buildConfiguredModelInfo(model modelEntry, ownedBy, modelType string, creat
 	if alias == "" {
 		return nil
 	}
-	displayName := strings.TrimSpace(model.GetDisplayName())
-	if displayName == "" {
-		displayName = fallbackDisplayName
-	}
+	displayName := strings.TrimSpace(fallbackDisplayName)
 	if displayName == "" {
 		displayName = alias
 	}
@@ -963,7 +959,6 @@ func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {
 	}
 
 	models := buildConfigModels(entry.Models, "openai", "openai", "codex")
-	configuredDisplayNames := make(map[string]string, len(entry.Models))
 	configuredConfigurationUpdates := make(map[string]bool, len(entry.Models))
 	seenConfiguredModels := make(map[string]struct{}, len(entry.Models))
 	for i := range entry.Models {
@@ -981,20 +976,12 @@ func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {
 		}
 		seenConfiguredModels[key] = struct{}{}
 		configuredConfigurationUpdates[key] = model.SupportConfigurationUpdate
-
-		displayName := strings.TrimSpace(model.DisplayName)
-		if displayName != "" {
-			configuredDisplayNames[key] = displayName
-		}
 	}
 	for _, model := range models {
 		if model == nil {
 			continue
 		}
 		key := strings.ToLower(model.ID)
-		if displayName, ok := configuredDisplayNames[key]; ok {
-			model.DisplayName = displayName
-		}
 		model.SupportConfigurationUpdate = configuredConfigurationUpdates[key]
 	}
 	return models
@@ -1079,13 +1066,7 @@ func oauthModelAliasesForAuth(cfg *config.Config, channel string, attributes map
 }
 
 func applyOAuthModelAliasEntries(aliases []config.OAuthModelAlias, models []*ModelInfo) []*ModelInfo {
-	type aliasEntry struct {
-		alias       string
-		displayName string
-		fork        bool
-	}
-
-	forward := make(map[string][]aliasEntry, len(aliases))
+	forward := make(map[string][]string, len(aliases))
 	for i := range aliases {
 		name := strings.TrimSpace(aliases[i].Name)
 		alias := strings.TrimSpace(aliases[i].Alias)
@@ -1096,11 +1077,7 @@ func applyOAuthModelAliasEntries(aliases []config.OAuthModelAlias, models []*Mod
 			continue
 		}
 		key := strings.ToLower(name)
-		forward[key] = append(forward[key], aliasEntry{
-			alias:       alias,
-			displayName: strings.TrimSpace(aliases[i].DisplayName),
-			fork:        aliases[i].Fork,
-		})
+		forward[key] = append(forward[key], alias)
 	}
 	if len(forward) == 0 {
 		return models
@@ -1127,23 +1104,8 @@ func applyOAuthModelAliasEntries(aliases []config.OAuthModelAlias, models []*Mod
 			continue
 		}
 
-		keepOriginal := false
-		for _, entry := range entries {
-			if entry.fork {
-				keepOriginal = true
-				break
-			}
-		}
-		if keepOriginal {
-			if _, exists := seen[key]; !exists {
-				seen[key] = struct{}{}
-				out = append(out, model)
-			}
-		}
-
-		addedAlias := false
-		for _, entry := range entries {
-			mappedID := strings.TrimSpace(entry.alias)
+		for _, mappedID := range entries {
+			mappedID := strings.TrimSpace(mappedID)
 			if mappedID == "" {
 				continue
 			}
@@ -1164,22 +1126,10 @@ func applyOAuthModelAliasEntries(aliases []config.OAuthModelAlias, models []*Mod
 			}
 			clone.ExplicitThinking = model.ExplicitThinking
 			clone.ExplicitInputModalities = model.ExplicitInputModalities
-			if entry.displayName != "" {
-				clone.DisplayName = entry.displayName
-			}
 			if clone.Name != "" {
 				clone.Name = rewriteModelInfoName(clone.Name, id, mappedID)
 			}
 			out = append(out, &clone)
-			addedAlias = true
-		}
-
-		if !keepOriginal && !addedAlias {
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			out = append(out, model)
 		}
 	}
 	return out

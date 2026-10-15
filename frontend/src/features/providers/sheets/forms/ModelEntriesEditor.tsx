@@ -67,31 +67,37 @@ export function ModelEntriesEditor({
         return (
           <div key={idx} className={styles.modelEntry}>
             <div className={styles.modelAliasRow}>
-              <input
-                className={styles.input}
-                placeholder={t('providersPage.modelOptions.modelName')}
-                aria-label={t('providersPage.modelOptions.modelName')}
-                value={entry.name}
-                onChange={(e) => onUpdate(idx, { name: e.target.value })}
-                disabled={mutating}
-              />
-              <input
-                className={styles.input}
-                placeholder={t(
-                  oauthAliasOnly
-                    ? 'auth_files.policy_alias_name'
-                    : 'providersPage.modelOptions.modelAlias'
-                )}
-                aria-label={t(
-                  oauthAliasOnly
-                    ? 'auth_files.policy_alias_name'
-                    : 'providersPage.modelOptions.modelAlias'
-                )}
-                required={aliasRequired}
-                value={entry.alias ?? ''}
-                onChange={(e) => onUpdate(idx, { alias: e.target.value })}
-                disabled={mutating}
-              />
+              <label className={styles.modelAliasField}>
+                <span className={styles.modelAliasLabel}>
+                  {t('providersPage.modelOptions.modelNameLabel')}
+                </span>
+                <input
+                  className={styles.input}
+                  placeholder={t('providersPage.modelOptions.modelName')}
+                  aria-label={t('providersPage.modelOptions.modelNameLabel')}
+                  value={entry.name}
+                  onChange={(e) => onUpdate(idx, { name: e.target.value })}
+                  disabled={mutating}
+                />
+              </label>
+              <label className={styles.modelAliasField}>
+                <span className={styles.modelAliasLabel}>
+                  {t('providersPage.modelOptions.modelAliasLabel')}
+                </span>
+                <input
+                  className={styles.input}
+                  placeholder={t(
+                    oauthAliasOnly
+                      ? 'auth_files.policy_alias_name'
+                      : 'providersPage.modelOptions.modelAlias'
+                  )}
+                  aria-label={t('providersPage.modelOptions.modelAliasLabel')}
+                  required={aliasRequired}
+                  value={entry.alias ?? ''}
+                  onChange={(e) => onUpdate(idx, { alias: e.target.value })}
+                  disabled={mutating}
+                />
+              </label>
               <div className={styles.modelEntryActions}>
                 {!oauthAliasOnly && supportsImage && !expanded && entry.image === true ? (
                   <span className={styles.entryBadge}>
@@ -103,25 +109,27 @@ export function ModelEntriesEditor({
                     {t('providersPage.form.modelBadgeThinking')}
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className={styles.entryCardIconBtn}
-                  onClick={() => setExpandedIdx(expanded ? null : idx)}
-                  title={expanded ? t('common.collapse') : t('common.expand')}
-                  aria-label={expanded ? t('common.collapse') : t('common.expand')}
-                  aria-expanded={expanded}
-                  disabled={mutating}
-                >
-                  <IconChevronDown
-                    className={[
-                      styles.entryCardChevron,
-                      expanded ? styles.entryCardChevronOpen : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    size={14}
-                  />
-                </button>
+                {!oauthAliasOnly && (
+                  <button
+                    type="button"
+                    className={styles.entryCardIconBtn}
+                    onClick={() => setExpandedIdx(expanded ? null : idx)}
+                    title={expanded ? t('common.collapse') : t('common.expand')}
+                    aria-label={expanded ? t('common.collapse') : t('common.expand')}
+                    aria-expanded={expanded}
+                    disabled={mutating}
+                  >
+                    <IconChevronDown
+                      className={[
+                        styles.entryCardChevron,
+                        expanded ? styles.entryCardChevronOpen : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      size={14}
+                    />
+                  </button>
+                )}
                 <button
                   type="button"
                   className={styles.removeBtn}
@@ -133,9 +141,9 @@ export function ModelEntriesEditor({
                 </button>
               </div>
             </div>
-            {expanded ? (
+            {expanded && !oauthAliasOnly ? (
               <div className={styles.modelEntryDetails}>
-                {!oauthAliasOnly && supportsImage ? (
+                {supportsImage ? (
                   <label className={styles.checkboxRow}>
                     <input
                       type="checkbox"
@@ -150,47 +158,13 @@ export function ModelEntriesEditor({
                     </span>
                   </label>
                 ) : null}
-                {oauthAliasOnly ? (
-                  <>
-                    <div className={styles.field}>
-                      <label className={styles.label}>
-                        {t('auth_files.policy_alias_display_name')}
-                        <input
-                          className={styles.input}
-                          value={entry.displayName ?? ''}
-                          disabled={mutating}
-                          onChange={(event) => onUpdate(idx, { displayName: event.target.value })}
-                        />
-                      </label>
-                    </div>
-                    {(['fork', 'forceMapping'] as const).map((field) => (
-                      <label key={field} className={styles.checkboxRow}>
-                        <input
-                          type="checkbox"
-                          className={styles.checkboxBox}
-                          checked={entry[field] === true}
-                          disabled={mutating}
-                          onChange={(event) => onUpdate(idx, { [field]: event.target.checked })}
-                        />
-                        <span className={styles.checkboxText}>
-                          {t(
-                            field === 'fork'
-                              ? 'auth_files.policy_alias_fork'
-                              : 'auth_files.policy_alias_force_mapping'
-                          )}
-                        </span>
-                      </label>
-                    ))}
-                  </>
-                ) : (
-                  <ModelAdvancedFields
-                    entry={entry}
-                    providerBrand={providerBrand}
-                    disabled={mutating}
-                    supportsThinking={supportsThinking}
-                    onUpdate={(patch) => onUpdate(idx, patch)}
-                  />
-                )}
+                <ModelAdvancedFields
+                  entry={entry}
+                  providerBrand={providerBrand}
+                  disabled={mutating}
+                  supportsThinking={supportsThinking}
+                  onUpdate={(patch) => onUpdate(idx, patch)}
+                />
               </div>
             ) : null}
           </div>

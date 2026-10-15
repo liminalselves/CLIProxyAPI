@@ -173,7 +173,6 @@ export function AuthFilesPage() {
     deleteModelAlias,
     handleMappingUpdate,
     handleDeleteLink,
-    handleToggleFork,
     handleRenameAlias,
     handleDeleteAlias,
   } = useAuthFilesOauth({ viewMode, files });
@@ -803,7 +802,6 @@ export function AuthFilesPage() {
             allProviderModels={allProviderModels}
             onUpdate={handleMappingUpdate}
             onDeleteLink={handleDeleteLink}
-            onToggleFork={handleToggleFork}
             onRenameAlias={handleRenameAlias}
             onDeleteAlias={handleDeleteAlias}
           />

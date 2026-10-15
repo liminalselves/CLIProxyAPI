@@ -332,7 +332,7 @@ func (m *Manager) executionModelCandidatesWithAlias(auth *Auth, routeModel strin
 	routing := m.loadAPIKeyModelRouting()
 	requestedModel := rewriteModelForAuth(routeModel, auth)
 	aliasResult := m.resolveExecutionAliasResultForRequestedWithRouting(routing, auth, requestedModel)
-	if aliasResult.ForceMapping && auth != nil && auth.Attributes != nil && strings.EqualFold(strings.TrimSpace(auth.Attributes[homeForceMappingAttributeKey]), "true") {
+	if aliasResult.OriginalAlias != "" && auth != nil && auth.Attributes != nil && strings.EqualFold(strings.TrimSpace(auth.Attributes[homeForceMappingAttributeKey]), "true") {
 		aliasResult.OriginalAlias = strings.TrimSpace(routeModel)
 	}
 	upstreamModel := executionAliasPoolModel(auth, requestedModel, aliasResult)
@@ -373,7 +373,7 @@ func (m *Manager) resolveExecutionAliasResultForRequested(auth *Auth, requestedM
 }
 
 func (m *Manager) resolveExecutionAliasResultForRequestedWithRouting(routing *apiKeyModelRoutingSnapshot, auth *Auth, requestedModel string) OAuthModelAliasResult {
-	if result := homeForceMappingAliasResult(auth, requestedModel); result.ForceMapping {
+	if result := homeResponseAliasResult(auth, requestedModel); result.OriginalAlias != "" {
 		return result
 	}
 	if isConfiguredModelRoutingAuth(auth) {
@@ -382,7 +382,9 @@ func (m *Manager) resolveExecutionAliasResultForRequestedWithRouting(routing *ap
 	return m.applyOAuthModelAliasWithResult(auth, requestedModel)
 }
 
-func homeForceMappingAliasResult(auth *Auth, requestedModel string) OAuthModelAliasResult {
+// homeResponseAliasResult builds the alias result for Home-dispatched auths whose
+// dispatch asked for the response model to be rewritten to the original alias.
+func homeResponseAliasResult(auth *Auth, requestedModel string) OAuthModelAliasResult {
 	if auth == nil || auth.Attributes == nil || !strings.EqualFold(strings.TrimSpace(auth.Attributes[homeForceMappingAttributeKey]), "true") {
 		return OAuthModelAliasResult{}
 	}
@@ -398,7 +400,6 @@ func homeForceMappingAliasResult(auth *Auth, requestedModel string) OAuthModelAl
 	}
 	return OAuthModelAliasResult{
 		UpstreamModel: upstreamModel,
-		ForceMapping:  true,
 		OriginalAlias: originalAlias,
 	}
 }
@@ -522,7 +523,7 @@ func resolveAttemptAliasResult(routing *apiKeyModelRoutingSnapshot, auth *Auth, 
 	if strings.TrimSpace(result.UpstreamModel) == "" {
 		return fallback
 	}
-	if result.ForceMapping && fallback.ForceMapping && strings.TrimSpace(fallback.OriginalAlias) != "" {
+	if result.OriginalAlias != "" && strings.TrimSpace(fallback.OriginalAlias) != "" {
 		result.OriginalAlias = fallback.OriginalAlias
 	}
 	return result
@@ -534,7 +535,7 @@ func (m *Manager) prepareExecutionModels(auth *Auth, routeModel string) []string
 }
 
 func rewriteForceMappedResponse(resp *cliproxyexecutor.Response, aliasResult OAuthModelAliasResult) {
-	if resp == nil || !aliasResult.ForceMapping || strings.TrimSpace(aliasResult.OriginalAlias) == "" {
+	if resp == nil || strings.TrimSpace(aliasResult.OriginalAlias) == "" {
 		return
 	}
 	resp.Payload = rewriteModelInResponse(resp.Payload, aliasResult.OriginalAlias)
@@ -994,7 +995,6 @@ func resolveOpenAICompatConfig(cfg *internalconfig.Config, providerKey, compatNa
 func asModelAliasEntries[T interface {
 	GetName() string
 	GetAlias() string
-	GetForceMapping() bool
 }](models []T) []modelAliasEntry {
 	if len(models) == 0 {
 		return nil

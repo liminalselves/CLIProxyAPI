@@ -228,10 +228,8 @@ func setupForceMappingManager(t *testing.T, provider, upstreamModel, aliasModel 
 	manager.RegisterExecutor(executor)
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		provider: {{
-			Name:         upstreamModel,
-			Alias:        aliasModel,
-			Fork:         true,
-			ForceMapping: true,
+			Name:  upstreamModel,
+			Alias: aliasModel,
 		}},
 	})
 
@@ -266,10 +264,8 @@ func setupForceMappingCreditsFallbackManager(t *testing.T, upstreamModel, aliasM
 	manager.RegisterExecutor(executor)
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		provider: {{
-			Name:         upstreamModel,
-			Alias:        aliasModel,
-			Fork:         true,
-			ForceMapping: true,
+			Name:  upstreamModel,
+			Alias: aliasModel,
 		}},
 	})
 
@@ -567,45 +563,40 @@ func setupAPIKeyForceMappingManager(t *testing.T, provider, upstreamModel, alias
 		cfg.ClaudeKey = []internalconfig.ClaudeKey{{
 			APIKey: apiKey,
 			Models: []internalconfig.ClaudeModel{{
-				Name:         upstreamModel,
-				Alias:        aliasModel,
-				ForceMapping: true,
+				Name:  upstreamModel,
+				Alias: aliasModel,
 			}},
 		}}
 	case "codex":
 		cfg.CodexKey = []internalconfig.CodexKey{{
 			APIKey: apiKey,
 			Models: []internalconfig.CodexModel{{
-				Name:         upstreamModel,
-				Alias:        aliasModel,
-				ForceMapping: true,
+				Name:  upstreamModel,
+				Alias: aliasModel,
 			}},
 		}}
 	case "xai":
 		cfg.XAIKey = []internalconfig.XAIKey{{
 			APIKey: apiKey,
 			Models: []internalconfig.XAIModel{{
-				Name:         upstreamModel,
-				Alias:        aliasModel,
-				ForceMapping: true,
+				Name:  upstreamModel,
+				Alias: aliasModel,
 			}},
 		}}
 	case "vertex":
 		cfg.VertexCompatAPIKey = []internalconfig.VertexCompatKey{{
 			APIKey: apiKey,
 			Models: []internalconfig.VertexCompatModel{{
-				Name:         upstreamModel,
-				Alias:        aliasModel,
-				ForceMapping: true,
+				Name:  upstreamModel,
+				Alias: aliasModel,
 			}},
 		}}
 	case "openai-compatibility":
 		cfg.OpenAICompatibility = []internalconfig.OpenAICompatibility{{
 			Name: provider,
 			Models: []internalconfig.OpenAICompatibilityModel{{
-				Name:         upstreamModel,
-				Alias:        aliasModel,
-				ForceMapping: true,
+				Name:  upstreamModel,
+				Alias: aliasModel,
 			}},
 		}}
 	default:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestManagerAliasQuotaFailoverWithUnobservedTargetModel(t *testing.T) {
 				manager := NewManager(nil, newSelector(), nil)
 				manager.SetRetryConfig(3, 30*time.Second, 0)
 				manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
-					"codex": {{Name: targetModel, Alias: routeModel, Fork: true}},
+					"codex": {{Name: targetModel, Alias: routeModel}},
 				})
 				highID, lowID := "alias-quota-high-"+t.Name(), "alias-quota-low-"+t.Name()
 				for _, candidate := range []*Auth{
@@ -98,7 +99,7 @@ func TestManagerAliasQuotaFailoverWithUnobservedTargetModel(t *testing.T) {
 						t.Fatal(errStream)
 					}
 					for chunk := range result.Chunks {
-						if chunk.Err != nil || string(chunk.Payload) != lowID {
+						if chunk.Err != nil || strings.TrimSpace(string(chunk.Payload)) != lowID {
 							t.Fatalf("chunk = %+v, want healthy lower-priority account", chunk)
 						}
 					}
@@ -126,7 +127,6 @@ func TestManagerExecute_ModelAliasRequestNotBlockedByOtherModelQuotaCooldown(t *
 		provider: {{
 			Name:  targetModel,
 			Alias: requestModel,
-			Fork:  true,
 		}},
 	})
 
@@ -205,7 +205,6 @@ func TestManagerSelectAuth_ModelAliasRequestNotBlockedByOtherModelQuotaCooldown(
 		provider: {{
 			Name:  targetModel,
 			Alias: requestModel,
-			Fork:  true,
 		}},
 	})
 
@@ -283,7 +282,6 @@ func TestManagerExecute_ModelAliasRequestBlockedWhenTargetModelInQuotaCooldown(t
 		provider: {{
 			Name:  targetModel,
 			Alias: requestModel,
-			Fork:  true,
 		}},
 	})
 

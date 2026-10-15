@@ -65,7 +65,6 @@ describe('provider model options', () => {
     const entry = draft({
       name: 'model',
       maxContextLength: 0,
-      forceMapping: false,
       isCompat: false,
       supportConfigurationUpdate: false,
       useMaxCompletionTokens: false,
@@ -80,7 +79,6 @@ describe('provider model options', () => {
       })
     ).toMatchObject({
       maxContextLength: 0,
-      forceMapping: false,
       isCompat: false,
       supportConfigurationUpdate: false,
       useMaxCompletionTokens: false,
@@ -112,8 +110,8 @@ describe('provider model options', () => {
       outputModalities: undefined,
     });
     expect(
-      buildModelOptions({ name: 'model', displayName: ' Catalog ', maxContextLength: '' })
-    ).toMatchObject({ displayName: 'Catalog', maxContextLength: undefined });
+      buildModelOptions({ name: 'model', maxContextLength: '' })
+    ).toMatchObject({ maxContextLength: undefined });
   });
 
   test('preserves untouched empty modalities and explicit null thinking budgets', () => {
@@ -194,10 +192,11 @@ describe('provider model options', () => {
 
   test('gates fields by provider capability', () => {
     const vertex = render('vertex');
-    expect(vertex).toContain('providersPage.modelOptions.displayName');
-    expect(vertex).toContain('providersPage.modelOptions.forceMapping');
     expect(vertex).not.toContain('providersPage.modelOptions.maxContextLength');
     expect(vertex).not.toContain('providersPage.modelOptions.isCompat');
+    expect(vertex).not.toContain('providersPage.modelOptions.supportConfigurationUpdate');
+    expect(vertex).not.toContain('providersPage.modelOptions.inputModalitiesText');
+    expect(vertex).not.toContain('providersPage.modelOptions.useMaxCompletionTokens');
     for (const brand of ['gemini', 'codex', 'openaiCompatibility'] as const) {
       const html = render(brand);
       expect(html).toContain('providersPage.modelOptions.maxContextLength');

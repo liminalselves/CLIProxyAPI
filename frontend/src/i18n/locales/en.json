@@ -410,9 +410,6 @@
     "using_api_label": "Use official API (using_api)",
     "using_api_hint": "Use the official xAI API when enabled; use Grok CLI chat-proxy when disabled.",
     "policy_alias_name": "Alias",
-    "policy_alias_display_name": "Display name",
-    "policy_alias_fork": "Keep the original model in listings",
-    "policy_alias_force_mapping": "Rewrite response model to the alias",
     "policy_unsupported": "Existing data cannot be edited with this form and will be preserved. Select Inherit to clear it, or replace it to start a new list.",
     "policy_replace": "Replace existing data",
     "policy_retry_label": "Credential request retries",
@@ -747,7 +744,6 @@
     "alias_name_placeholder": "Source model name",
     "alias_placeholder": "Alias (required)",
     "duplicate_alias": "Each alias must be unique for this provider.",
-    "alias_fork_label": "Keep original",
     "add_alias": "Add alias",
     "save": "Save/Update",
     "save_success": "Model aliases updated",
@@ -1895,10 +1891,8 @@
       "supportPromptCacheKeyHint": "Derive and inject prompt_cache_key for compatible requests. Enable only when the upstream supports this field."
     },
     "modelOptions": {
-      "displayName": "Display name",
       "maxContextLength": "Context length",
       "contextHint": "Non-negative integer; leave empty to use the default.",
-      "forceMapping": "Rewrite response model to alias",
       "isCompat": "Compatibility mode",
       "supportConfigurationUpdate": "Allow configuration updates",
       "inputModalitiesText": "Input modalities",
@@ -1919,7 +1913,9 @@
       "invalidRange": "Minimum thinking budget must not exceed the maximum. Blank bounds count as 0.",
       "removeModel": "Remove model",
       "modelName": "Model name",
-      "modelAlias": "Alias (optional)"
+      "modelNameLabel": "Upstream model",
+      "modelAlias": "Alias (optional)",
+      "modelAliasLabel": "Alias"
     },
     "runtimePolicy": {
       "title": "Advanced runtime policy",
@@ -2452,7 +2448,7 @@
     "no_messages": "No messages yet.",
     "no_model_options": "No model records",
     "no_models": "No matching models.",
-    "credential_models_hint": "Set an alias to rename the model used in requests without changing the channel prefix. Leave it blank to clear this credential's override and restore the original name or an existing channel alias. Keep the upstream model name unchanged.",
+    "credential_models_hint": "Set an alias to rename the model used in requests; responses also report the alias as the model. The channel prefix is unchanged. Leave it blank to clear this credential's override and restore the original name or an existing channel alias. Keep the upstream model name unchanged.",
     "no_models_hint": "Adjust the filters, or create a channel and add credentials first.",
     "no_performance": "No call data in the last 24 hours.",
     "no_providers": "No AI providers added to this channel yet.",

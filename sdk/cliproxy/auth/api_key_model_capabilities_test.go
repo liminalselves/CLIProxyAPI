@@ -161,7 +161,7 @@ func TestAttachResolvedAPIKeyModelInfoSupportsKeylessOpenAICompatibility(t *test
 		BaseURL: "https://example.com/v1",
 		Models: []internalconfig.OpenAICompatibilityModel{
 			{
-				Name: "shared-upstream", Alias: "public-model", ForceMapping: true, IsCompat: true,
+				Name: "shared-upstream", Alias: "public-model", IsCompat: true,
 				Thinking: &registry.ThinkingSupport{Levels: []string{"high"}},
 			},
 			{
@@ -185,12 +185,12 @@ func TestAttachResolvedAPIKeyModelInfoSupportsKeylessOpenAICompatibility(t *test
 	if len(models) != 2 || models[0] != "shared-upstream" || models[1] != "fallback-upstream" {
 		t.Fatalf("keyless execution models = %v, want [shared-upstream fallback-upstream]", models)
 	}
-	if !aliasResult.ForceMapping || aliasResult.UpstreamModel != "shared-upstream" {
-		t.Fatalf("keyless force mapping result = %+v, want shared-upstream force mapping", aliasResult)
+	if aliasResult.OriginalAlias != "public-model" || aliasResult.UpstreamModel != "shared-upstream" {
+		t.Fatalf("keyless alias result = %+v, want shared-upstream with response rewrite to public-model", aliasResult)
 	}
 	fallbackAliasResult := resolveAttemptAliasResult(routing, auth, "tenant/public-model", "fallback-upstream", aliasResult)
-	if fallbackAliasResult.ForceMapping {
-		t.Fatalf("fallback alias result = %+v, want force mapping disabled", fallbackAliasResult)
+	if fallbackAliasResult.OriginalAlias != "public-model" || fallbackAliasResult.UpstreamModel != "fallback-upstream" {
+		t.Fatalf("fallback alias result = %+v, want fallback-upstream keeping response rewrite to public-model", fallbackAliasResult)
 	}
 	req := attachResolvedAPIKeyModelInfo(routing, cliproxyexecutor.Request{}, auth, "tenant/public-model", models[0])
 	assertResolvedThinkingLevels(t, req, "high")

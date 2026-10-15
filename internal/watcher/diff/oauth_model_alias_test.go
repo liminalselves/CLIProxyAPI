@@ -6,15 +6,15 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 )
 
-func TestDiffOAuthModelAliasChanges_IncludesDisplayName(t *testing.T) {
+func TestDiffOAuthModelAliasChanges_IncludesAliasChange(t *testing.T) {
 	oldMap := map[string][]config.OAuthModelAlias{
 		"antigravity": {
-			{Name: "claude-opus-4-6-thinking", Alias: "claude-antigravity-opus-4-6-thinking", DisplayName: "Antigravity Opus 4.6"},
+			{Name: "claude-opus-4-6-thinking", Alias: "claude-antigravity-opus-4-6-thinking"},
 		},
 	}
 	newMap := map[string][]config.OAuthModelAlias{
 		"antigravity": {
-			{Name: "claude-opus-4-6-thinking", Alias: "claude-antigravity-opus-4-6-thinking", DisplayName: "Antigravity Opus 4.6 (Thinking)"},
+			{Name: "claude-opus-4-6-thinking", Alias: "claude-antigravity-opus-4-6"},
 		},
 	}
 

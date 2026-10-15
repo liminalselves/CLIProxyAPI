@@ -20,7 +20,7 @@ const render = (element: ReturnType<typeof createElement>) =>
 function renderMapping(overrides: { disabled?: boolean; canRemove?: boolean } = {}) {
   return render(
     createElement(OAuthAliasMappingRow, {
-      entry: { name: 'source-model', alias: 'client-model', fork: true },
+      entry: { name: 'source-model', alias: 'client-model' },
       index: 1,
       options: [{ value: 'source-model' }],
       disabled: false,
@@ -90,14 +90,13 @@ describe('OAuth editor UI', () => {
       expect(id).toBeDefined();
       expect(markup).toContain(`for="${id}"`);
     }
-    expect(markup).toContain('checked=""');
   });
 
   test('preserves the last-row delete guard and disabled editing state', () => {
     const lastRow = renderMapping({ canRemove: false });
     expect(lastRow.match(/disabled=""/g)).toHaveLength(1);
     const disabledRow = renderMapping({ disabled: true });
-    expect(disabledRow.match(/disabled=""/g)).toHaveLength(4);
+    expect(disabledRow.match(/disabled=""/g)).toHaveLength(3);
   });
 
   test('all four locales include editor guidance and accessible row labels', () => {

@@ -6,9 +6,6 @@ type PreservedRule = RequestScopedErrorRule & { [rawRule]?: Record<string, unkno
 export interface CredentialAliasDraft {
   name: string;
   alias: string;
-  fork?: boolean;
-  displayName?: string;
-  forceMapping?: boolean;
   original?: Record<string, unknown>;
 }
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -22,35 +19,24 @@ export function readCredentialAliases(value: unknown): CredentialAliasDraft[] | 
   if (!Array.isArray(value)) return null;
   const rows: CredentialAliasDraft[] = [];
   for (const row of value) {
-    if (
-      !object(row) ||
-      typeof row.name !== 'string' ||
-      typeof row.alias !== 'string' ||
-      (row.fork !== undefined && typeof row.fork !== 'boolean') ||
-      (row['display-name'] !== undefined && typeof row['display-name'] !== 'string') ||
-      (row['force-mapping'] !== undefined && typeof row['force-mapping'] !== 'boolean')
-    )
-      return null;
+    if (!object(row) || typeof row.name !== 'string' || typeof row.alias !== 'string') return null;
     rows.push({
       name: row.name,
       alias: row.alias,
-      fork: row.fork as boolean | undefined,
-      displayName: row['display-name'] as string | undefined,
-      forceMapping: row['force-mapping'] as boolean | undefined,
       original: { ...row },
     });
   }
   return rows;
 }
+
+// Legacy per-entry keys dropped from saved payloads; the backend no longer recognizes them.
+const DEPRECATED_ALIAS_KEYS = ['fork', 'display-name', 'force-mapping', 'displayName', 'forceMapping'];
+
 export function buildCredentialAliases(rows: CredentialAliasDraft[]): Record<string, unknown>[] {
   return rows.map((row) => {
-    const result = { ...row.original, name: row.name, alias: row.alias };
-    for (const [key, value] of Object.entries({
-      fork: row.fork,
-      'display-name': row.displayName,
-      'force-mapping': row.forceMapping,
-    })) {
-      if (value !== undefined) Object.assign(result, { [key]: value });
+    const result: Record<string, unknown> = { ...row.original, name: row.name, alias: row.alias };
+    for (const key of DEPRECATED_ALIAS_KEYS) {
+      delete result[key];
     }
     return result;
   });

@@ -205,7 +205,7 @@ func sampleCloneRuntimeConfig() *Config {
 			"codex": {"hidden-model"},
 		},
 		OAuthModelAlias: map[string][]OAuthModelAlias{
-			"codex": {{Name: "upstream-model", Alias: "client-model", Fork: true}},
+			"codex": {{Name: "upstream-model", Alias: "client-model"}},
 		},
 		Payload: PayloadConfig{
 			Default: []PayloadRule{{

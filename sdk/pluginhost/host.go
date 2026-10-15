@@ -18,10 +18,11 @@ type ModelInfo = pluginapi.ModelInfo
 type ThinkingSupport = pluginapi.ThinkingSupport
 
 // OAuthModelAlias defines a model ID alias for OAuth/file-backed auth channels.
+// When a request matches Alias, the model is routed to Name and response
+// model fields are rewritten back to the requested alias.
 type OAuthModelAlias struct {
 	Name  string
 	Alias string
-	Fork  bool
 }
 
 // RuntimeConfig is the public plugin host configuration used by embedders.
@@ -260,7 +261,6 @@ func oauthModelAliasToInternal(in map[string][]OAuthModelAlias) map[string][]int
 			items = append(items, internalconfig.OAuthModelAlias{
 				Name:  alias.Name,
 				Alias: alias.Alias,
-				Fork:  alias.Fork,
 			})
 		}
 		out[provider] = items

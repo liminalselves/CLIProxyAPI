@@ -491,7 +491,6 @@ upstream:
 #       models:
 #         - name: "gemini-2.5-flash" # upstream model name
 #           alias: "gemini-flash"    # client alias mapped to the upstream model
-#           display-name: "Gemini Flash" # optional catalog display name
 #           max-context-length: 1048576 # optional: override Codex client context window metadata
 #           is-compat: false             # optional: preserve thinking blocks with empty signatures for compatible upstreams
 #           thinking:                    # optional: exact thinking capability for this configured model
@@ -578,7 +577,6 @@ upstream:
 #       models:                                     # optional: map aliases to upstream model names
 #         - name: "gemini-2.5-flash"                # upstream model name
 #           alias: "vertex-flash"                   # client-visible alias
-#           display-name: "Vertex Flash"            # optional catalog display name
 #           thinking:                                # optional: exact thinking capability for this configured model
 #             levels: ["high", "medium", "low", "none", "auto"]
 #         - name: "gemini-2.5-pro"
@@ -613,9 +611,7 @@ upstream:
 #       models:
 #         - name: "gpt-5-codex"   # upstream model name
 #           alias: "codex-latest" # client alias mapped to the upstream model
-#           display-name: "Codex Latest" # optional catalog display name
 #           max-context-length: 1048576 # optional: override Codex client context window metadata
-#           force-mapping: true    # optional: rewrite response model fields back to the alias
 #           # Preserve thinking blocks with empty signatures for compatible upstreams.
 #           # client.codex.optimize-multi-agent-v2 applies to both OAuth and API-key credentials.
 #           is-compat: false
@@ -661,9 +657,7 @@ upstream:
 #       models:
 #         - name: "claude-3-5-sonnet-20241022" # upstream model name
 #           alias: "claude-sonnet-latest"      # client alias mapped to the upstream model
-#           display-name: "Claude Sonnet"      # optional catalog display name
 #           max-context-length: 1048576         # optional: override Codex client context window metadata
-#           force-mapping: true                 # optional: rewrite response model fields back to the alias
 #           is-compat: false                    # optional: preserve thinking blocks with empty signatures for compatible upstreams
 #           thinking:                           # optional: exact thinking capability for this configured model
 #             levels: ["max", "xhigh", "high", "medium", "low", "minimal", "none", "auto"]
@@ -776,9 +770,7 @@ upstream:
 #       models:
 #         - name: "grok-4.5"       # upstream model name
 #           alias: "grok-latest"   # client alias mapped to the upstream model
-#           display-name: "Grok Latest" # optional catalog display name
 #           max-context-length: 1048576 # optional: override Codex client context window metadata
-#           force-mapping: true     # optional: rewrite response model fields back to the alias
 #           is-compat: false        # optional: preserve thinking blocks with empty signatures for compatible upstreams
 #           thinking:               # optional: exact thinking capability for this configured model
 #             levels: ["xhigh", "high", "medium", "low"]
@@ -842,7 +834,6 @@ upstream:
 #       models: # The models supported by the provider.
 #         - name: "moonshotai/kimi-k2:free" # The actual model name.
 #           alias: "kimi-k2"               # The alias used in the API.
-#           display-name: "Kimi K2"         # optional catalog display name
 #           max-context-length: 1048576    # optional: override Codex client context window metadata
 #           image: false                   # optional: set true to allow this model on /v1/images/generations and /v1/images/edits (not chat/responses image input)
 #           input-modalities: [text, image] # optional: declare /v1/chat/completions and /v1/responses multimodal input for Codex clients. Use [text] for upstreams that reject multimodal tool result content.
@@ -876,16 +867,13 @@ oauth:
 
   # Global OAuth model name aliases (per channel)
   # These aliases rename model IDs for both model listing and request routing.
+  # Response model fields are always rewritten back to the requested alias.
   # Supported channels: vertex, aistudio, antigravity, claude, codex, kimi, xai, meta.
   # NOTE: These aliases do not apply to any of the upstream groups under api-keys.
   # NOTE: Because aliases affect the merged /v1 model list and merged request routing, overlapping
   # client-visible names can become ambiguous across providers. For strict backend pinning, use
   # unique aliases/prefixes or avoid overlapping names.
   # You can repeat the same name with different aliases to expose multiple client model names.
-  # Optional per-entry fields:
-  #   fork: true                  # keep the upstream model and also expose the alias as a separate client-visible model
-  #   display-name: "Model Name" # override the human-readable name shown in model catalogs
-  #   force-mapping: true         # rewrite upstream response model fields back to the client-visible alias (example below uses antigravity only)
   # Per-auth OAuth aliases can also be stored in an OAuth auth JSON file as "model_aliases".
   # Legacy "model-aliases" credentials remain supported and are normalized at load time.
   # They apply only to that selected auth and take precedence over global aliases for the same client-visible alias.
@@ -908,9 +896,6 @@ oauth:
   #   antigravity:
   #     - name: "gemini-pro-agent"                   # upstream Antigravity model id
   #       alias: "gemini-3.1-pro-preview"            # client-visible id (Gemini 3.1 Pro Preview)
-  #       display-name: "Antigravity Gemini 3.1 Pro" # optional catalog display name
-  #       fork: true
-  #       force-mapping: true
   #   claude:
   #     - name: "claude-sonnet-4-5-20250929"
   #       alias: "cs4.5"

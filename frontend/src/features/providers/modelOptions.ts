@@ -3,9 +3,7 @@ import type { ModelEntryInput } from './types';
 import { buildThinkingFromLevels, readThinkingLevels, type ThinkingLevel } from './thinkingLevels';
 
 export interface ModelOptionsInput {
-  displayName?: string;
   maxContextLength?: string;
-  forceMapping?: boolean;
   isCompat?: boolean;
   supportConfigurationUpdate?: boolean;
   inputModalitiesText?: string;
@@ -28,9 +26,7 @@ export function readModelOptions(model: ModelAlias): ModelOptionsInput & {
 } {
   const thinking = model.thinking;
   return {
-    displayName: model.displayName,
     maxContextLength: model.maxContextLength?.toString(),
-    forceMapping: model.forceMapping,
     isCompat: model.isCompat,
     supportConfigurationUpdate: model.supportConfigurationUpdate,
     inputModalitiesText: model.inputModalities?.join(', '),
@@ -99,9 +95,7 @@ export function buildModelOptions(entry: ModelEntryInput): Partial<ModelAlias> {
     }
   }
   return {
-    displayName: entry.displayName?.trim() || undefined,
     maxContextLength: numberValue(entry.maxContextLength),
-    forceMapping: entry.forceMapping,
     isCompat: entry.isCompat,
     supportConfigurationUpdate: entry.supportConfigurationUpdate,
     inputModalities:

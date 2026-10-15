@@ -219,7 +219,7 @@ func readOpenAICompatStreamPayload(t *testing.T, streamResult *cliproxyexecutor.
 		}
 		payload = append(payload, chunk.Payload...)
 	}
-	return string(payload)
+	return strings.TrimSpace(string(payload))
 }
 
 func TestManagerExecuteCount_OpenAICompatAliasPoolStopsOnInvalidRequest(t *testing.T) {
@@ -264,15 +264,15 @@ func TestResolveModelAliasPoolFromConfigModels(t *testing.T) {
 func TestResolveModelAliasPoolPrefersExactSuffixedAlias(t *testing.T) {
 	models := []modelAliasEntry{
 		internalconfig.OpenAICompatibilityModel{Name: "base-model", Alias: "public"},
-		internalconfig.OpenAICompatibilityModel{Name: "low-model", Alias: "public(low)", ForceMapping: true},
+		internalconfig.OpenAICompatibilityModel{Name: "low-model", Alias: "public(low)"},
 	}
 	got := resolveModelAliasPoolFromConfigModels("public(low)", models)
 	if len(got) != 1 || got[0] != "low-model(low)" {
 		t.Fatalf("exact suffixed pool = %v, want [low-model(low)]", got)
 	}
 	result := resolveModelAliasResultFromConfigModels("public(low)", models)
-	if result.UpstreamModel != "low-model(low)" || !result.ForceMapping {
-		t.Fatalf("exact suffixed alias result = %+v, want low-model(low) with force mapping", result)
+	if result.UpstreamModel != "low-model(low)" || result.OriginalAlias != "public(low)" {
+		t.Fatalf("exact suffixed alias result = %+v, want low-model(low) with response rewrite", result)
 	}
 }
 
@@ -316,8 +316,8 @@ func TestManagerExecute_OpenAICompatAliasPoolForceMappingRotatesAndRewritesRespo
 		},
 	}
 	m := newOpenAICompatPoolTestManager(t, alias, []internalconfig.OpenAICompatibilityModel{
-		{Name: "deepseek-v3.1", Alias: alias, ForceMapping: true},
-		{Name: "glm-5", Alias: alias, ForceMapping: true},
+		{Name: "deepseek-v3.1", Alias: alias},
+		{Name: "glm-5", Alias: alias},
 	}, executor)
 
 	var payloads []string
@@ -473,7 +473,7 @@ func TestManagerExecute_OpenAICompatAliasPoolFallsBackWithinSameAuth(t *testing.
 	}
 }
 
-func TestManagerExecute_OpenAICompatAliasPoolUsesSelectedModelForceMapping(t *testing.T) {
+func TestManagerExecute_OpenAICompatAliasPoolRewritesSelectedModelToAlias(t *testing.T) {
 	alias := "public-model"
 	executor := &openAICompatPoolExecutor{
 		id:              openAICompatPoolProviderKey,
@@ -481,7 +481,7 @@ func TestManagerExecute_OpenAICompatAliasPoolUsesSelectedModelForceMapping(t *te
 		executePayloads: map[string][]byte{"second-upstream": []byte(`{"model":"second-upstream"}`)},
 	}
 	manager := newOpenAICompatPoolTestManager(t, alias, []internalconfig.OpenAICompatibilityModel{
-		{Name: "first-upstream", Alias: alias, ForceMapping: true},
+		{Name: "first-upstream", Alias: alias},
 		{Name: "second-upstream", Alias: alias},
 	}, executor)
 
@@ -489,8 +489,8 @@ func TestManagerExecute_OpenAICompatAliasPoolUsesSelectedModelForceMapping(t *te
 	if errExecute != nil {
 		t.Fatalf("Execute() error = %v", errExecute)
 	}
-	if got := string(response.Payload); got != `{"model":"second-upstream"}` {
-		t.Fatalf("payload = %s, want selected model without force mapping", got)
+	if got := string(response.Payload); got != `{"model":"public-model"}` {
+		t.Fatalf("payload = %s, want selected model rewritten to alias", got)
 	}
 }
 
@@ -518,8 +518,8 @@ func TestManagerExecuteStream_OpenAICompatAliasPoolRetriesOnEmptyBootstrap(t *te
 		}
 		payload = append(payload, chunk.Payload...)
 	}
-	if string(payload) != "glm-5" {
-		t.Fatalf("payload = %q, want %q", string(payload), "glm-5")
+	if got := strings.TrimSpace(string(payload)); got != "glm-5" {
+		t.Fatalf("payload = %q, want %q", got, "glm-5")
 	}
 	got := executor.StreamModels()
 	want := []string{"deepseek-v3.1", "glm-5"}
@@ -552,8 +552,8 @@ func TestManagerExecuteStream_OpenAICompatAliasPoolFallsBackBeforeFirstByte(t *t
 		}
 		payload = append(payload, chunk.Payload...)
 	}
-	if string(payload) != "glm-5" {
-		t.Fatalf("payload = %q, want %q", string(payload), "glm-5")
+	if got := strings.TrimSpace(string(payload)); got != "glm-5" {
+		t.Fatalf("payload = %q, want %q", got, "glm-5")
 	}
 	got := executor.StreamModels()
 	want := []string{"deepseek-v3.1", "glm-5"}

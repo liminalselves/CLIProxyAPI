@@ -77,7 +77,6 @@ func TestManagerExecute_OAuthAliasBypassesBlockedRouteModel(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  true,
 		}},
 	})
 

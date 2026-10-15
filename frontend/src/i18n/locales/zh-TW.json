@@ -408,9 +408,6 @@
     "using_api_label": "使用官方 API（using_api）",
     "using_api_hint": "開啟後使用 xAI 官方 API；關閉時使用 Grok CLI chat-proxy。",
     "policy_alias_name": "模型別名",
-    "policy_alias_display_name": "顯示名稱",
-    "policy_alias_fork": "在模型清單中保留原始模型",
-    "policy_alias_force_mapping": "將回應模型名稱改寫為別名",
     "policy_unsupported": "現有資料無法透過此表單編輯，將保持原樣。選擇繼承可清除資料，也可取代後重新填寫清單。",
     "policy_replace": "取代現有資料",
     "policy_retry_label": "單憑證請求重試",
@@ -745,7 +742,6 @@
     "alias_name_placeholder": "原模型名稱",
     "alias_placeholder": "別名（必填）",
     "duplicate_alias": "同一供應商下的別名不能重複。",
-    "alias_fork_label": "保留原名",
     "add_alias": "新增別名",
     "save": "儲存/更新",
     "save_success": "模型別名已更新",
@@ -1919,10 +1915,8 @@
       "supportPromptCacheKeyHint": "為相容的請求衍生並注入 prompt_cache_key。僅在上游支援此欄位時啟用。"
     },
     "modelOptions": {
-      "displayName": "顯示名稱",
       "maxContextLength": "上下文長度",
       "contextHint": "非負安全整數；留空使用預設值。",
-      "forceMapping": "將回應模型名稱改寫為別名",
       "isCompat": "相容模式",
       "supportConfigurationUpdate": "允許設定更新",
       "inputModalitiesText": "輸入模態",
@@ -1943,7 +1937,9 @@
       "invalidRange": "最小思考預算不能大於最大值，留空的邊界按 0 處理。",
       "removeModel": "移除模型",
       "modelName": "模型名稱",
-      "modelAlias": "別名（選填）"
+      "modelNameLabel": "上游模型名稱",
+      "modelAlias": "別名（選填）",
+      "modelAliasLabel": "對外別名"
     },
     "runtimePolicy": {
       "title": "進階執行策略",
@@ -2476,7 +2472,7 @@
     "no_messages": "還沒有留言。",
     "no_model_options": "暫無模型記錄",
     "no_models": "沒有符合的模型。",
-    "credential_models_hint": "填寫別名即可修改呼叫時使用的模型名稱，渠道前綴保持不變。留空可清除此憑證的改名設定，恢復原名或既有的渠道別名。上游模型名稱無需修改。",
+    "credential_models_hint": "填寫別名即可修改調用時使用的模型名，回應中的模型名也會顯示為別名；渠道前綴保持不變。留空可清除此憑證的改名設定，恢復原名或已有的渠道別名。上游模型名稱無需修改。",
     "no_models_hint": "調整篩選條件，或先建立渠道並新增憑證。",
     "no_performance": "最近 24 小時暫無呼叫資料。",
     "no_providers": "該渠道還沒有新增 AI 提供商。",

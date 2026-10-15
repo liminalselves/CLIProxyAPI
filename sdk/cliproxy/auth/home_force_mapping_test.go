@@ -26,9 +26,9 @@ func TestHomeForceMappingAliasResult(t *testing.T) {
 		},
 	}
 
-	result := homeForceMappingAliasResult(auth, "grok-latest")
-	if result.UpstreamModel != "grok-4.5" || !result.ForceMapping || result.OriginalAlias != "grok-latest" {
-		t.Fatalf("homeForceMappingAliasResult() = %+v", result)
+	result := homeResponseAliasResult(auth, "grok-latest")
+	if result.UpstreamModel != "grok-4.5" || result.OriginalAlias != "grok-latest" {
+		t.Fatalf("homeResponseAliasResult() = %+v", result)
 	}
 }
 
@@ -42,17 +42,17 @@ func TestHomeForceMappingAliasResultRequiresSameOriginalAlias(t *testing.T) {
 		},
 	}
 
-	if result := homeForceMappingAliasResult(auth, " GROK-LATEST "); !result.ForceMapping {
-		t.Fatalf("homeForceMappingAliasResult() = %+v, want same alias force mapping", result)
+	if result := homeResponseAliasResult(auth, " GROK-LATEST "); result.OriginalAlias == "" {
+		t.Fatalf("homeResponseAliasResult() = %+v, want same alias response rewrite", result)
 	}
-	if result := homeForceMappingAliasResult(auth, "grok-latest(high)"); !result.ForceMapping {
-		t.Fatalf("homeForceMappingAliasResult() = %+v, want reasoning suffix force mapping", result)
+	if result := homeResponseAliasResult(auth, "grok-latest(high)"); result.OriginalAlias == "" {
+		t.Fatalf("homeResponseAliasResult() = %+v, want reasoning suffix response rewrite", result)
 	}
-	if result := homeForceMappingAliasResult(auth, "grok-latest(custom)"); result.ForceMapping || result.OriginalAlias != "" {
-		t.Fatalf("homeForceMappingAliasResult() = %+v, want no force mapping for a custom suffix", result)
+	if result := homeResponseAliasResult(auth, "grok-latest(custom)"); result.OriginalAlias != "" {
+		t.Fatalf("homeResponseAliasResult() = %+v, want no rewrite for a custom suffix", result)
 	}
-	if result := homeForceMappingAliasResult(auth, "grok-other"); result.ForceMapping || result.OriginalAlias != "" {
-		t.Fatalf("homeForceMappingAliasResult() = %+v, want no force mapping for a different alias", result)
+	if result := homeResponseAliasResult(auth, "grok-other"); result.OriginalAlias != "" {
+		t.Fatalf("homeResponseAliasResult() = %+v, want no rewrite for a different alias", result)
 	}
 }
 
@@ -627,8 +627,8 @@ func TestHomeForceMappingAliasResultRequiresExplicitFlag(t *testing.T) {
 		},
 	}
 
-	result := homeForceMappingAliasResult(auth, "grok-latest")
-	if result.ForceMapping || result.OriginalAlias != "" {
-		t.Fatalf("homeForceMappingAliasResult() = %+v, want no force mapping", result)
+	result := homeResponseAliasResult(auth, "grok-latest")
+	if result.OriginalAlias != "" {
+		t.Fatalf("homeResponseAliasResult() = %+v, want no response rewrite", result)
 	}
 }

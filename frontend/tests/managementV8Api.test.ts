@@ -72,14 +72,12 @@ describe('v8 management API contracts', () => {
     });
     const put = mock('put');
     expect(await authFilesApi.getOauthModelAlias()).toEqual({
-      codex: [{ name: 'source', alias: 'alias', forceMapping: false }],
+      codex: [{ name: 'source', alias: 'alias' }],
     });
     expect(get).toHaveBeenLastCalledWith('/config/oauth/model-alias');
-    await authFilesApi.saveOauthModelAlias('codex', [
-      { name: 'source', alias: 'alias', forceMapping: false },
-    ]);
+    await authFilesApi.saveOauthModelAlias('codex', [{ name: 'source', alias: 'alias' }]);
     expect(put).toHaveBeenLastCalledWith('/config/oauth/model-alias', {
-      codex: [{ name: 'source', alias: 'alias', 'force-mapping': false }],
+      codex: [{ name: 'source', alias: 'alias' }],
     });
     get.mockResolvedValue({ codex: ['blocked'] });
     expect(await authFilesApi.getOauthExcludedModels()).toEqual({ codex: ['blocked'] });

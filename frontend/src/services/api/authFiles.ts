@@ -27,9 +27,6 @@ export type AuthFileFieldsPatch = {
   model_aliases?: Array<{
     name: string;
     alias: string;
-    fork?: boolean;
-    'display-name'?: string;
-    'force-mapping'?: boolean;
   }>;
   request_scoped_errors?: Array<{
     status?: number;
@@ -396,14 +393,7 @@ export const normalizeOauthModelAlias = (
         const name = String(entry.name ?? entry.id ?? entry.model ?? '').trim();
         const alias = String(entry.alias ?? '').trim();
         if (!name || !alias) return null;
-        const fork = entry.fork === true;
-        const forceMappingValue = entry['force-mapping'] ?? entry.forceMapping;
-        const normalizedEntry: OAuthModelAliasEntry = { name, alias };
-        if (fork) normalizedEntry.fork = true;
-        if (typeof forceMappingValue === 'boolean') {
-          normalizedEntry.forceMapping = forceMappingValue;
-        }
-        return normalizedEntry;
+        return { name, alias };
       })
       .filter(Boolean)
       .forEach((entry) => {
@@ -425,17 +415,10 @@ export const normalizeOauthModelAlias = (
 export const serializeOauthModelAliases = (
   aliases: OAuthModelAliasEntry[]
 ): Array<Record<string, unknown>> =>
-  aliases.map((entry) => {
-    const payload: Record<string, unknown> = {
-      name: entry.name,
-      alias: entry.alias,
-    };
-    if (entry.fork) payload.fork = true;
-    if (typeof entry.forceMapping === 'boolean') {
-      payload['force-mapping'] = entry.forceMapping;
-    }
-    return payload;
-  });
+  aliases.map((entry) => ({
+    name: entry.name,
+    alias: entry.alias,
+  }));
 
 const OAUTH_MODEL_ALIAS_ENDPOINT = '/config/oauth/model-alias';
 const OAUTH_EXCLUDED_MODELS_ENDPOINT = '/config/oauth/excluded-models';

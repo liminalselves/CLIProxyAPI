@@ -375,17 +375,11 @@ type RoutingConfig struct {
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
 // It maps the upstream model name (Name) to the client-visible alias (Alias).
-// When Fork is true, the alias is added as an additional model in listings while
-// keeping the original model ID available.
+// When a request matches Alias, the model is routed to Name and response
+// model fields are rewritten back to the requested alias.
 type OAuthModelAlias struct {
 	Name  string `yaml:"name" json:"name"`
 	Alias string `yaml:"alias" json:"alias"`
-	Fork  bool   `yaml:"fork,omitempty" json:"fork,omitempty"`
-
-	// DisplayName is the optional human-readable name shown in model catalogs.
-	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
-
-	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
 }
 
 // OAuthModelSetting defines provider/channel model settings (such as context window overrides) for OAuth credentials.
@@ -594,16 +588,11 @@ type ClaudeModel struct {
 	Name string `yaml:"name" json:"name"`
 
 	// Alias is the client-facing model name that maps to Name.
+	// When set, response model fields are rewritten back to the alias.
 	Alias string `yaml:"alias" json:"alias"`
-
-	// DisplayName is the optional human-readable name shown in model catalogs.
-	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
 
 	// MaxContextLength overrides the context window advertised to Codex clients.
 	MaxContextLength int `yaml:"max-context-length,omitempty" json:"max-context-length,omitempty"`
-
-	// ForceMapping rewrites upstream response model fields back to Alias.
-	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
 
 	// IsCompat preserves thinking blocks with empty signatures for compatible upstreams
 	// and enables provider-aware signed-thinking replay for Claude-compatible API-key models.
@@ -618,9 +607,7 @@ func (m ClaudeModel) GetName() string { return m.Name }
 
 func (m ClaudeModel) GetAlias() string { return m.Alias }
 
-func (m ClaudeModel) GetDisplayName() string   { return m.DisplayName }
 func (m ClaudeModel) GetMaxContextLength() int { return m.MaxContextLength }
-func (m ClaudeModel) GetForceMapping() bool    { return m.ForceMapping }
 func (m ClaudeModel) GetIsCompat() bool        { return m.IsCompat }
 
 func (m ClaudeModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
@@ -694,16 +681,11 @@ type CodexModel struct {
 	Name string `yaml:"name" json:"name"`
 
 	// Alias is the client-facing model name that maps to Name.
+	// When set, response model fields are rewritten back to the alias.
 	Alias string `yaml:"alias" json:"alias"`
-
-	// DisplayName is the optional human-readable name shown in model catalogs.
-	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
 
 	// MaxContextLength overrides the context window advertised to Codex clients.
 	MaxContextLength int `yaml:"max-context-length,omitempty" json:"max-context-length,omitempty"`
-
-	// ForceMapping rewrites upstream response model fields back to Alias.
-	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
 
 	// IsCompat converts Codex MultiAgentV2 agent_message items into portable
 	// Responses message/user input when client.codex.optimize-multi-agent-v2 is also true.
@@ -724,9 +706,7 @@ func (m CodexModel) GetName() string { return m.Name }
 
 func (m CodexModel) GetAlias() string { return m.Alias }
 
-func (m CodexModel) GetDisplayName() string   { return m.DisplayName }
 func (m CodexModel) GetMaxContextLength() int { return m.MaxContextLength }
-func (m CodexModel) GetForceMapping() bool    { return m.ForceMapping }
 func (m CodexModel) GetIsCompat() bool        { return m.IsCompat }
 
 func (m CodexModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
@@ -801,16 +781,11 @@ type GeminiModel struct {
 	Name string `yaml:"name" json:"name"`
 
 	// Alias is the client-facing model name that maps to Name.
+	// When set, response model fields are rewritten back to the alias.
 	Alias string `yaml:"alias" json:"alias"`
-
-	// DisplayName is the optional human-readable name shown in model catalogs.
-	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
 
 	// MaxContextLength overrides the context window advertised to Codex clients.
 	MaxContextLength int `yaml:"max-context-length,omitempty" json:"max-context-length,omitempty"`
-
-	// ForceMapping rewrites upstream response model fields back to Alias.
-	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
 
 	// IsCompat preserves thinking blocks with empty signatures for compatible upstreams.
 	// Default false keeps the normal signature validation behavior.
@@ -824,9 +799,7 @@ func (m GeminiModel) GetName() string { return m.Name }
 
 func (m GeminiModel) GetAlias() string { return m.Alias }
 
-func (m GeminiModel) GetDisplayName() string   { return m.DisplayName }
 func (m GeminiModel) GetMaxContextLength() int { return m.MaxContextLength }
-func (m GeminiModel) GetForceMapping() bool    { return m.ForceMapping }
 func (m GeminiModel) GetIsCompat() bool        { return m.IsCompat }
 
 func (m GeminiModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
@@ -894,16 +867,11 @@ type OpenAICompatibilityModel struct {
 	Name string `yaml:"name" json:"name"`
 
 	// Alias is the model name alias that clients will use to reference this model.
+	// When set, response model fields are rewritten back to the alias.
 	Alias string `yaml:"alias" json:"alias"`
-
-	// DisplayName is the optional human-readable name shown in model catalogs.
-	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
 
 	// MaxContextLength overrides the context window advertised to Codex clients.
 	MaxContextLength int `yaml:"max-context-length,omitempty" json:"max-context-length,omitempty"`
-
-	// ForceMapping rewrites upstream response model fields back to Alias.
-	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
 
 	// Image marks this model as callable through /v1/images/generations and /v1/images/edits.
 	Image bool `yaml:"image,omitempty" json:"image,omitempty"`
@@ -932,9 +900,7 @@ func (m OpenAICompatibilityModel) GetName() string { return m.Name }
 
 func (m OpenAICompatibilityModel) GetAlias() string { return m.Alias }
 
-func (m OpenAICompatibilityModel) GetDisplayName() string          { return m.DisplayName }
 func (m OpenAICompatibilityModel) GetMaxContextLength() int        { return m.MaxContextLength }
-func (m OpenAICompatibilityModel) GetForceMapping() bool           { return m.ForceMapping }
 func (m OpenAICompatibilityModel) GetIsCompat() bool               { return m.IsCompat }
 func (m OpenAICompatibilityModel) GetUseMaxCompletionTokens() bool { return m.UseMaxCompletionTokens }
 

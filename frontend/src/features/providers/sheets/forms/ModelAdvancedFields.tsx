@@ -29,7 +29,6 @@ export function ModelAdvancedFields({
   const levels = entry.thinkingLevels ?? [];
   const textField = (
     key:
-      | 'displayName'
       | 'maxContextLength'
       | 'inputModalitiesText'
       | 'outputModalitiesText'
@@ -61,7 +60,6 @@ export function ModelAdvancedFields({
   );
   const checkbox = (
     key:
-      | 'forceMapping'
       | 'isCompat'
       | 'supportConfigurationUpdate'
       | 'useMaxCompletionTokens'
@@ -87,9 +85,7 @@ export function ModelAdvancedFields({
   );
   return (
     <>
-      {textField('displayName')}
       {capabilities.maxContextLength ? textField('maxContextLength', true) : null}
-      {checkbox('forceMapping')}
       {capabilities.isCompat ? checkbox('isCompat') : null}
       {capabilities.configurationUpdate ? checkbox('supportConfigurationUpdate') : null}
       {capabilities.modalities ? (

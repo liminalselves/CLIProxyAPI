@@ -92,7 +92,6 @@ func TestManager_NoForkAlias_RetainsCooldownAfterReconcile(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -169,7 +168,6 @@ func TestManager_NoForkAlias_BypassesCoolingAuthOnSubsequentRequest(t *testing.T
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -247,7 +245,6 @@ func TestManager_NoForkAlias_CooldownPersistenceConsistency(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -328,8 +325,8 @@ func TestManager_NoForkAlias_MultipleAliasesToSameTarget(t *testing.T) {
 	manager.RegisterExecutor(executor)
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		provider: {
-			{Name: targetModel, Alias: routeModel1, Fork: false},
-			{Name: targetModel, Alias: routeModel2, Fork: false},
+			{Name: targetModel, Alias: routeModel1},
+			{Name: targetModel, Alias: routeModel2},
 		},
 	})
 
@@ -421,7 +418,6 @@ func TestManager_NoForkAlias_CleanupAfterAliasRemoved(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -500,7 +496,6 @@ func TestManager_ForkTrue_RetainsStateAndSuspendsBoth(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  true,
 		}},
 	})
 
@@ -569,7 +564,6 @@ func TestManager_NoForkAlias_ExpiredCooldownResetClean(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -628,7 +622,6 @@ func TestManager_NoForkAlias_MarkResultAndResetQuotaProjection(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -702,7 +695,6 @@ func TestManager_NoForkAlias_PerAuthAlias_RetainsCooldownAfterReconcile(t *testi
 		provider: {{
 			Name:  globalTarget,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -733,7 +725,6 @@ func TestManager_NoForkAlias_PerAuthAlias_RetainsCooldownAfterReconcile(t *testi
 	SetOAuthModelAliasesAttribute(auth1, []internalconfig.OAuthModelAlias{{
 		Name:  perAuthTarget,
 		Alias: routeModel,
-		Fork:  false,
 	}})
 
 	if _, errRegister := manager.Register(context.Background(), auth1); errRegister != nil {
@@ -798,7 +789,6 @@ func TestManager_NoForkAlias_RealPersistenceRestore_BypassesCoolingAuth(t *testi
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -851,7 +841,6 @@ func TestManager_NoForkAlias_RealPersistenceRestore_BypassesCoolingAuth(t *testi
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -915,7 +904,6 @@ func TestManager_NoForkAlias_StorePersistenceCleanedWhenAliasRemoved(t *testing.
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -993,8 +981,8 @@ func TestManager_NoForkAlias_MultipleAliases_BothSkipCoolingAuthEndToEnd(t *test
 	manager.RegisterExecutor(executor)
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		provider: {
-			{Name: targetModel, Alias: routeModel1, Fork: false},
-			{Name: targetModel, Alias: routeModel2, Fork: false},
+			{Name: targetModel, Alias: routeModel1},
+			{Name: targetModel, Alias: routeModel2},
 		},
 	})
 
@@ -1079,7 +1067,6 @@ func TestManager_NoForkAlias_AliasRepointing_PrunesOldTargetAndReconciles(t *tes
 			provider: {{
 				Name:  modelA,
 				Alias: modelB,
-				Fork:  false,
 			}},
 		})
 
@@ -1117,7 +1104,6 @@ func TestManager_NoForkAlias_AliasRepointing_PrunesOldTargetAndReconciles(t *tes
 			provider: {{
 				Name:  modelC,
 				Alias: modelB,
-				Fork:  false,
 			}},
 		})
 
@@ -1168,7 +1154,6 @@ func TestManager_NoForkAlias_AliasRepointing_PrunesOldTargetAndReconciles(t *tes
 			provider: {{
 				Name:  modelC,
 				Alias: modelA,
-				Fork:  false,
 			}},
 		})
 
@@ -1236,7 +1221,6 @@ func TestManager_NoForkAlias_ConcurrentReconcileAndMarkResult(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1320,7 +1304,6 @@ func TestManager_NoForkAlias_MarkResultRouteModelWritesAuthoritativeState(t *tes
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1423,7 +1406,6 @@ func TestManager_NoForkAlias_LegacyModelStatePrunedOnReconcile(t *testing.T) {
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1524,7 +1506,6 @@ func TestManager_NoForkAlias_RealDiskFileStoreRestore_BypassesCoolingAuth(t *tes
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1582,7 +1563,6 @@ func TestManager_NoForkAlias_RealDiskFileStoreRestore_BypassesCoolingAuth(t *tes
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1640,7 +1620,6 @@ func TestManager_NoForkAlias_ConcurrentReconcileMarkResult_FullConsistency(t *te
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1802,7 +1781,6 @@ func TestManager_NoForkAlias_CancelledContextReconcile_CooldownStoreCleaned(t *t
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -1897,8 +1875,8 @@ func TestManager_NoForkAlias_MarkResultTargetModelNoSecondaryAliasResolution(t *
 	// Configure chained aliases: modelB -> modelA, and modelA -> modelC
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		provider: {
-			{Name: modelA, Alias: modelB, Fork: false},
-			{Name: modelC, Alias: modelA, Fork: false},
+			{Name: modelA, Alias: modelB},
+			{Name: modelC, Alias: modelA},
 		},
 	})
 
@@ -1979,7 +1957,6 @@ func TestManager_NoForkAlias_MarkResultTransientErrorsSyncSuspendRegistry(t *tes
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -2216,7 +2193,6 @@ func TestManager_NoForkAlias_StrictContextCheckingStore_ReconcilePersistsUnderCa
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -2443,7 +2419,6 @@ func TestManager_NoForkAlias_HistoricalRouteStateOnly_MigratedToTargetCooldown(t
 		provider: {{
 			Name:  targetModelA,
 			Alias: routeModelB,
-			Fork:  false,
 		}},
 	})
 
@@ -2517,7 +2492,6 @@ func TestManager_NoForkAlias_ResetQuota_CancelledContextCleansCooldownStore(t *t
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -2603,7 +2577,6 @@ func TestManager_NoForkAlias_ConcurrentOperations_NaturalFinalConsistency(t *tes
 		provider: {{
 			Name:  targetModel,
 			Alias: routeModel,
-			Fork:  false,
 		}},
 	})
 
@@ -2910,12 +2883,10 @@ func TestManager_NoForkAlias_ChainedAlias_MarkResultTargetA_ReconcilePreservesSt
 			{
 				Name:  targetA,
 				Alias: routeB,
-				Fork:  false,
 			},
 			{
 				Name:  targetC,
 				Alias: targetA,
-				Fork:  false,
 			},
 		},
 	})
@@ -3146,12 +3117,10 @@ func TestManager_NoForkAlias_ChainedAlias_BothRoutesRegistered_SafeTwoPhaseMigra
 			{
 				Name:  targetA,
 				Alias: routeB,
-				Fork:  false,
 			},
 			{
 				Name:  targetC,
 				Alias: targetA,
-				Fork:  false,
 			},
 		},
 	})
@@ -3263,7 +3232,6 @@ func TestManager_NoForkAlias_ResetQuota_ErrorPersistCleansCooldownStore(t *testi
 			{
 				Name:  targetModel,
 				Alias: routeModel,
-				Fork:  false,
 			},
 		},
 	})

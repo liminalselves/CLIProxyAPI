@@ -237,9 +237,8 @@ func TestApplyOAuthModelAlias_ForceMappingSameBasePreservesSuffix(t *testing.T) 
 
 	aliases := map[string][]internalconfig.OAuthModelAlias{
 		"antigravity": {{
-			Name:         "gemini-2.5-pro",
-			Alias:        "gemini-2.5-pro(8192)",
-			ForceMapping: true,
+			Name:  "gemini-2.5-pro",
+			Alias: "gemini-2.5-pro(8192)",
 		}},
 	}
 
@@ -328,10 +327,8 @@ func TestApplyOAuthModelAlias_Devin(t *testing.T) {
 	aliases := map[string][]internalconfig.OAuthModelAlias{
 		"devin": {
 			{
-				Name:         "devin/claude-fable-5-1",
-				Alias:        "fable-5-1",
-				Fork:         true,
-				ForceMapping: true,
+				Name:  "devin/claude-fable-5-1",
+				Alias: "fable-5-1",
 			},
 		},
 	}
@@ -358,9 +355,6 @@ func TestApplyOAuthModelAlias_Devin(t *testing.T) {
 	if result.UpstreamModel != "devin/claude-fable-5-1(max)" {
 		t.Errorf("UpstreamModel = %q, want %q", result.UpstreamModel, "devin/claude-fable-5-1(max)")
 	}
-	if !result.ForceMapping {
-		t.Errorf("ForceMapping = false, want true")
-	}
 	if result.OriginalAlias != "fable-5-1" {
 		t.Errorf("OriginalAlias = %q, want %q", result.OriginalAlias, "fable-5-1")
 	}
@@ -372,10 +366,8 @@ func TestApplyOAuthModelAlias_Meta(t *testing.T) {
 	aliases := map[string][]internalconfig.OAuthModelAlias{
 		"meta": {
 			{
-				Name:         "muse-spark-1.3",
-				Alias:        "muse-latest",
-				Fork:         true,
-				ForceMapping: true,
+				Name:  "muse-spark-1.3",
+				Alias: "muse-latest",
 			},
 		},
 	}
@@ -408,9 +400,6 @@ func TestApplyOAuthModelAlias_Meta(t *testing.T) {
 	result := mgr.applyOAuthModelAliasWithResult(auth, "muse-latest(max)")
 	if result.UpstreamModel != "muse-spark-1.3(max)" {
 		t.Errorf("UpstreamModel = %q, want %q", result.UpstreamModel, "muse-spark-1.3(max)")
-	}
-	if !result.ForceMapping {
-		t.Errorf("ForceMapping = false, want true")
 	}
 	if result.OriginalAlias != "muse-latest" {
 		t.Errorf("OriginalAlias = %q, want %q", result.OriginalAlias, "muse-latest")
@@ -459,7 +448,7 @@ func TestApplyOAuthModelAliasWithResult_ForceMappingUsesConfigAliasNotRequestSuf
 	mgr := NewManager(nil, nil, nil)
 	mgr.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		"codex": {{
-			Name: "gpt-5.4", Alias: "gpt-5.4-fast", Fork: true, ForceMapping: true,
+			Name: "gpt-5.4", Alias: "gpt-5.4-fast",
 		}},
 	})
 	auth := &Auth{ID: "t", Provider: "codex"}
@@ -476,31 +465,28 @@ func TestApplyOAuthModelAliasWithResultPrefersExactSuffixedAlias(t *testing.T) {
 	manager := NewManager(nil, nil, nil)
 	manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		"codex": {
-			{Name: "base-upstream", Alias: "public", Fork: true},
-			{Name: "low-upstream", Alias: "public(low)", Fork: true, ForceMapping: true},
+			{Name: "base-upstream", Alias: "public"},
+			{Name: "low-upstream", Alias: "public(low)"},
 		},
 	})
 	auth := &Auth{ID: "exact-suffix", Provider: "codex"}
 	result := manager.applyOAuthModelAliasWithResult(auth, "public(low)")
-	if result.UpstreamModel != "low-upstream(low)" || !result.ForceMapping {
-		t.Fatalf("exact suffixed alias result = %+v, want low-upstream(low) with force mapping", result)
+	if result.UpstreamModel != "low-upstream(low)" || result.OriginalAlias != "public(low)" {
+		t.Fatalf("exact suffixed alias result = %+v, want low-upstream(low) with response rewrite", result)
 	}
 }
 
-func TestApplyOAuthModelAliasWithResult_NoForceMappingPreservesRequestedModelInOriginalAlias(t *testing.T) {
+func TestApplyOAuthModelAliasWithResult_OriginalAliasUsesConfiguredAlias(t *testing.T) {
 	t.Parallel()
 	mgr := NewManager(nil, nil, nil)
 	mgr.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
 		"codex": {{
-			Name: "gpt-5.4", Alias: "gpt-5.4-fast", Fork: true, ForceMapping: false,
+			Name: "gpt-5.4", Alias: "gpt-5.4-fast",
 		}},
 	})
 	auth := &Auth{ID: "t", Provider: "codex"}
 	res := mgr.applyOAuthModelAliasWithResult(auth, "gpt-5.4-fast(high)")
-	if res.ForceMapping {
-		t.Fatal("expected ForceMapping false")
-	}
-	if res.OriginalAlias != "gpt-5.4-fast(high)" {
-		t.Fatalf("OriginalAlias = %q want requested model when force-mapping off", res.OriginalAlias)
+	if res.OriginalAlias != "gpt-5.4-fast" {
+		t.Fatalf("OriginalAlias = %q, want configured alias", res.OriginalAlias)
 	}
 }

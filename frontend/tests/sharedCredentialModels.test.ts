@@ -29,7 +29,7 @@ describe('subscription credential model editor', () => {
     expect(buildSharedCredentialModelAliases(rows)).toEqual([{ name: 'gpt-5', alias: 'my-gpt' }]);
   });
 
-  test('reopening preserves upstream names, advanced settings and currently unavailable aliases', () => {
+  test('reopening keeps upstream names and unavailable aliases, dropping deprecated keys on save', () => {
     const aliases = [
       {
         name: 'gpt-5',
@@ -50,14 +50,19 @@ describe('subscription credential model editor', () => {
       ],
     })!;
     expect(rows).toHaveLength(2);
-    expect(buildSharedCredentialModelAliases(rows)).toEqual(aliases);
+    expect(buildSharedCredentialModelAliases(rows)).toEqual([
+      { name: 'gpt-5', alias: 'my-gpt' },
+      { name: 'unavailable-model', alias: 'saved-model', extension: 'preserved' },
+    ]);
     rows[0].alias = 'renamed-again';
     expect(buildSharedCredentialModelAliases(rows)[0]).toEqual({
-      ...aliases[0],
+      name: 'gpt-5',
       alias: 'renamed-again',
     });
     rows[0].alias = '';
-    expect(buildSharedCredentialModelAliases(rows)).toEqual([aliases[1]]);
+    expect(buildSharedCredentialModelAliases(rows)).toEqual([
+      { name: 'unavailable-model', alias: 'saved-model', extension: 'preserved' },
+    ]);
   });
 
   test('preserves inherited aliases without pinning them and keeps slashes in upstream IDs', () => {
@@ -82,11 +87,10 @@ describe('subscription credential model editor', () => {
     expect(buildSharedCredentialModelAliases(rows)).toEqual([
       { name: 'org/other', alias: 'other' },
     ]);
-    rows[0].forceMapping = true;
+    rows[0].alias = 'renamed-public';
     expect(buildSharedCredentialModelAliases(rows)[0]).toEqual({
       name: 'org/model',
-      alias: 'public-name',
-      'force-mapping': true,
+      alias: 'renamed-public',
     });
   });
 

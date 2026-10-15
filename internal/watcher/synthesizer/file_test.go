@@ -908,7 +908,7 @@ func TestFileSynthesizer_Synthesize_OAuthModelAliases(t *testing.T) {
 	}
 
 	got := auths[0].Attributes["model_aliases"]
-	want := `[{"name":"gpt-5.3-codex-spark","alias":"gpt-5.5"},{"name":"gpt-5.3-codex-spark","alias":"gpt-5.4","fork":true}]`
+	want := `[{"name":"gpt-5.3-codex-spark","alias":"gpt-5.5"},{"name":"gpt-5.3-codex-spark","alias":"gpt-5.4"}]`
 	if got != want {
 		t.Fatalf("expected model_aliases %q, got %q", want, got)
 	}

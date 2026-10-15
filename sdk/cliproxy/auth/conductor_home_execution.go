@@ -137,7 +137,7 @@ func (m *Manager) executeHomeOnce(ctx context.Context, providers []string, req c
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
 		models, pooled, aliasResult, routing := m.preparedExecutionModelsWithAlias(auth, routeModel)
-		if aliasResult.ForceMapping && responseAlias != "" {
+		if aliasResult.OriginalAlias != "" && responseAlias != "" {
 			aliasResult.OriginalAlias = responseAlias
 		}
 		if len(models) > 1 {

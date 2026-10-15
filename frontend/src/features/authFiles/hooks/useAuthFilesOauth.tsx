@@ -20,12 +20,6 @@ export type UseAuthFilesOauthResult = {
   deleteModelAlias: (provider: string) => void;
   handleMappingUpdate: (provider: string, sourceModel: string, newAlias: string) => Promise<void>;
   handleDeleteLink: (provider: string, sourceModel: string, alias: string) => void;
-  handleToggleFork: (
-    provider: string,
-    sourceModel: string,
-    alias: string,
-    fork: boolean
-  ) => Promise<void>;
   handleRenameAlias: (oldAlias: string, newAlias: string) => Promise<void>;
   handleDeleteAlias: (aliasName: string) => void;
 };
@@ -300,7 +294,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
 
       const nextMappings: OAuthModelAliasEntry[] = [
         ...currentMappings,
-        { name: nameTrim, alias: aliasTrim, fork: true },
+        { name: nameTrim, alias: aliasTrim },
       ];
 
       try {
@@ -369,46 +363,6 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     [loadModelAlias, modelAlias, showConfirmation, showLoadRequired, showNotification, t]
   );
 
-  const handleToggleFork = useCallback(
-    async (provider: string, sourceModel: string, alias: string, fork: boolean) => {
-      if (!modelAliasReadyRef.current) {
-        showLoadRequired();
-        return;
-      }
-      const normalizedProvider = normalizeProviderKey(provider);
-      if (!normalizedProvider) return;
-
-      const providerKey = Object.keys(modelAlias).find(
-        (key) => normalizeProviderKey(key) === normalizedProvider
-      );
-      const currentMappings = (providerKey ? modelAlias[providerKey] : null) ?? [];
-      const nameKey = sourceModel.trim().toLowerCase();
-      const aliasKey = alias.trim().toLowerCase();
-      let changed = false;
-
-      const nextMappings = currentMappings.map((m) => {
-        const mName = (m.name ?? '').trim().toLowerCase();
-        const mAlias = (m.alias ?? '').trim().toLowerCase();
-        if (mName === nameKey && mAlias === aliasKey) {
-          changed = true;
-          return fork ? { ...m, fork: true } : { ...m, fork: undefined };
-        }
-        return m;
-      });
-
-      if (!changed) return;
-
-      try {
-        await authFilesApi.saveOauthModelAlias(normalizedProvider, nextMappings);
-        await loadModelAlias();
-        showNotification(t('oauth_model_alias.save_success'), 'success');
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : '';
-        showNotification(`${t('oauth_model_alias.save_failed')}: ${errorMessage}`, 'error');
-      }
-    },
-    [loadModelAlias, modelAlias, showLoadRequired, showNotification, t]
-  );
 
   const handleRenameAlias = useCallback(
     async (oldAlias: string, newAlias: string) => {
@@ -552,7 +506,6 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     deleteModelAlias,
     handleMappingUpdate,
     handleDeleteLink,
-    handleToggleFork,
     handleRenameAlias,
     handleDeleteAlias,
   };

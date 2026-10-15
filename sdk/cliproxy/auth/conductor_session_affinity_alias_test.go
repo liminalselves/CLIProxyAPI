@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestManagerSessionAffinityAliasCooldownPreservesSelection(t *testing.T) {
 					// Introduce an alias while both credentials retain cooldowns under
 					// its old name. The newly resolved target is healthy on both.
 					manager.SetOAuthModelAlias(map[string][]internalconfig.OAuthModelAlias{
-						"codex": {{Name: targetModel, Alias: routeModel, Fork: true}},
+						"codex": {{Name: targetModel, Alias: routeModel}},
 					})
 					var attempts []string
 					execute := func(_ context.Context, auth *Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
@@ -115,7 +116,7 @@ func TestManagerSessionAffinityAliasCooldownPreservesSelection(t *testing.T) {
 								}
 								payload = append(payload, chunk.Payload...)
 							}
-							return string(payload), nil
+							return strings.TrimSpace(string(payload)), nil
 						}
 					}
 					assertPick := func(label, session, wantID string) {
