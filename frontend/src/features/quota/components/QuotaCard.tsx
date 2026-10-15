@@ -1,10 +1,11 @@
 /**
- * 额度卡片：头部（提供商图标 + mono 文件名）+ 四态 body + 动作 footer。
+ * 额度卡片：头部（提供商图标 + mono 文件名 + 刷新图标）+ 四态 body + 按需 footer。
  *
  * - idle：整个 body 是一个点击加载按钮（上游直连有速率考虑，不自动拉取）；
- * - loading：双幽灵行骨架（aria-busy，文字等价视觉隐藏）；
- * - error：失败色条 + footer 刷新即重试；
- * - success：provider Body（穿 QuotaBody.module.scss 全页外衣）。
+ * - loading：双幽灵行骨架（aria-busy，文字等价视觉隐藏），头部图标旋转；
+ * - error：失败色条 + 头部刷新图标即重试；
+ * - success：provider Body（穿 QuotaBody.module.scss 全页外衣），footer 只
+ *   在有重置动作时出现。
  */
 
 import { useState, type CSSProperties } from 'react';
@@ -112,6 +113,16 @@ export function QuotaCard(props: QuotaCardProps) {
             <span className={styles.fileSubName}>{displayParts.secondary}</span>
           )}
         </span>
+        <button
+          type="button"
+          className={styles.headRefresh}
+          onClick={onRefresh}
+          disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting || claudeReset.busy)}
+          title={t('auth_files.quota_refresh_hint')}
+          aria-label={t('auth_files.quota_refresh_single')}
+        >
+          <IconRefreshCw size={14} className={loading ? styles.spinning : undefined} />
+        </button>
       </header>
 
       <div className={styles.body}>
@@ -161,7 +172,7 @@ export function QuotaCard(props: QuotaCardProps) {
         )}
       </div>
 
-      {status !== 'idle' && (
+      {status !== 'idle' && (entry.type === 'claude' || showReset) && (
         <footer className={styles.actionRow}>
           {entry.type === 'claude' && (
             <button
@@ -187,16 +198,6 @@ export function QuotaCard(props: QuotaCardProps) {
               {t('codex_quota.reset_button')}
             </button>
           )}
-          <button
-            type="button"
-            className={styles.actionPill}
-            onClick={onRefresh}
-            disabled={isQuotaRefreshDisabled(canRefresh, loading, resetting || claudeReset.busy)}
-            title={t('auth_files.quota_refresh_hint')}
-          >
-            <IconRefreshCw size={13} className={loading ? styles.spinning : undefined} />
-            {t('auth_files.quota_refresh_single')}
-          </button>
         </footer>
       )}
     </article>

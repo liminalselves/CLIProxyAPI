@@ -29,8 +29,10 @@ export function MetaQuotaBody({ quota, classes }: QuotaBodyProps<MetaQuotaState>
             </span>
           )}
           {data.isSubscriptionActive !== undefined && (
-            <span className={classes.codexPlanValue}>
-              {t(data.isSubscriptionActive ? 'meta_quota.active' : 'meta_quota.inactive')}
+            <span className={classes.codexPlanItem}>
+              <span className={classes.codexPlanValue}>
+                {t(data.isSubscriptionActive ? 'meta_quota.active' : 'meta_quota.inactive')}
+              </span>
             </span>
           )}
         </div>

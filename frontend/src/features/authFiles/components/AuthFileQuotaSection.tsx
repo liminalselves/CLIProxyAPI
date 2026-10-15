@@ -7,13 +7,13 @@ import {
   useQuotaStore,
 } from '@/stores';
 import type { AuthFileItem } from '@/types';
-import { getStatusFromError, resolveQuotaErrorMessage } from '@/utils/quota';
+import { resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { isRuntimeOnlyAuthFile, type QuotaProviderType } from '@/features/authFiles/constants';
-import { Button } from '@/components/ui/Button';
 import { IconRefreshCw } from '@/components/ui/icons';
 import { bindQuotaClasses } from '@/features/quota/types';
 import { QUOTA_ADAPTERS, type QuotaCardState } from '@/features/quota/providers';
+import { runQuotaRefresh } from '@/features/quota/quotaActions';
 import {
   buildQuotaResetConfirmation,
   quotaResetParams,
@@ -69,47 +69,8 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (isRuntimeOnlyAuthFile(file)) return;
     if (file.disabled) return;
     if (quota?.status === 'loading') return;
-
-    const cacheGeneration = captureQuotaCacheGeneration(file.name);
-
-    updateQuotaState((prev) => ({
-      ...prev,
-      [cacheKey]: adapter.buildLoadingState(),
-    }));
-
-    try {
-      const data = await adapter.fetchQuota(file, t);
-      commitIfQuotaCacheCurrent(cacheGeneration, () => {
-        updateQuotaState((prev) => ({
-          ...prev,
-          [cacheKey]: adapter.buildSuccessState(data),
-        }));
-        showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('common.unknown_error');
-      const status = getStatusFromError(err);
-      commitIfQuotaCacheCurrent(cacheGeneration, () => {
-        updateQuotaState((prev) => ({
-          ...prev,
-          [cacheKey]: adapter.buildErrorState(message, status),
-        }));
-        showNotification(
-          t('auth_files.quota_refresh_failed', { name: file.name, message }),
-          'error'
-        );
-      });
-    }
-  }, [
-    adapter,
-    cacheKey,
-    disableControls,
-    file,
-    quota?.status,
-    showNotification,
-    t,
-    updateQuotaState,
-  ]);
+    await runQuotaRefresh(adapter, file, t);
+  }, [adapter, disableControls, file, quota?.status, t]);
 
   const resetQuotaForFile = useCallback(() => {
     if (disableControls) return;
@@ -167,23 +128,6 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(adapter.canResetQuota?.(quota));
-  const resetQuotaAction =
-    adapter.resetQuota && showResetQuotaAction ? (
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className={styles.quotaResetCreditButton}
-        onClick={() => resetQuotaForFile()}
-        disabled={!canUseResetQuota}
-        loading={resettingQuota}
-        title={t('codex_quota.reset_button')}
-        aria-label={t('codex_quota.reset_button')}
-      >
-        {!resettingQuota && <IconRefreshCw size={14} />}
-        {t('codex_quota.reset_button')}
-      </Button>
-    ) : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,
@@ -192,6 +136,39 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
 
   return (
     <div className={styles.quotaSection}>
+      <div className={styles.quotaHead}>
+        <span className={styles.quotaTitle}>{t('auth_files.quota_section_label')}</span>
+        <div className={styles.quotaTools}>
+          {adapter.resetQuota && showResetQuotaAction && (
+            <button
+              type="button"
+              className={styles.quotaToolChip}
+              onClick={() => resetQuotaForFile()}
+              disabled={!canUseResetQuota}
+              title={t('codex_quota.reset_button')}
+              aria-label={t('codex_quota.reset_button')}
+            >
+              {resettingQuota && (
+                <IconRefreshCw size={11} className={styles.spinning} aria-hidden="true" />
+              )}
+              {t('codex_quota.reset_button')}
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.quotaToolIcon}
+            onClick={() => void refreshQuotaForFile()}
+            disabled={!canRefreshQuota || quotaStatus === 'loading'}
+            title={t('auth_files.quota_refresh_hint')}
+            aria-label={t('auth_files.quota_refresh_single')}
+          >
+            <IconRefreshCw
+              size={13}
+              className={quotaStatus === 'loading' ? styles.spinning : undefined}
+            />
+          </button>
+        </div>
+      </div>
       {quotaStatus === 'loading' ? (
         <div className={styles.quotaMessage}>{t(`${adapter.i18nPrefix}.loading`)}</div>
       ) : quotaStatus === 'idle' ? (
@@ -213,26 +190,6 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         <adapter.Body quota={quota} classes={compactQuotaClasses} />
       ) : (
         <div className={styles.quotaMessage}>{t(`${adapter.i18nPrefix}.idle`)}</div>
-      )}
-      {quotaStatus !== 'idle' && (resetQuotaAction || quotaType === 'devin') && (
-        <div className={styles.quotaCardActions}>
-          {resetQuotaAction}
-          {quotaType === 'devin' && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className={styles.quotaResetCreditButton}
-              onClick={() => void refreshQuotaForFile()}
-              disabled={!canRefreshQuota || quotaStatus === 'loading'}
-              loading={quotaStatus === 'loading'}
-              title={t('auth_files.quota_refresh_hint')}
-            >
-              {quotaStatus !== 'loading' && <IconRefreshCw size={14} />}
-              {t('auth_files.quota_refresh_single')}
-            </Button>
-          )}
-        </div>
       )}
     </div>
   );

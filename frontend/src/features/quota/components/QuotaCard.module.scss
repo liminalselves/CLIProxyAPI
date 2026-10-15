@@ -103,6 +103,48 @@
   @include text-ellipsis;
 }
 
+/* 头部刷新图标：额度刷新统一收进卡头，footer 只留有后果的重置动作 */
+.headRefresh {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-tertiary);
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .headRefresh:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  }
+}
+
 /* ---------- body 容器 ---------- */
 
 .body {
@@ -310,11 +352,13 @@
 @media (prefers-reduced-motion: reduce) {
   .card,
   .idleBody,
+  .headRefresh,
   .actionPill {
     transition: none;
   }
 
   .idleBody:active:not(:disabled),
+  .headRefresh:active:not(:disabled),
   .actionPill:active:not(:disabled) {
     transform: none;
   }

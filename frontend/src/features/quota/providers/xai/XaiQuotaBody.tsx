@@ -93,15 +93,17 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
     return (
       <>
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
-          <span
-            className={
-              billing.planLabel
-                ? planValueClass(billing.planTier, classes)
-                : classes.premiumPlanValue
-            }
-          >
-            {billing.planLabel ?? t('xai_quota.plan_paid')}
+          <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanLabel}>{t('xai_quota.plan_label')}</span>
+            <span
+              className={
+                billing.planLabel
+                  ? planValueClass(billing.planTier, classes)
+                  : classes.premiumPlanValue
+              }
+            >
+              {billing.planLabel ?? t('xai_quota.plan_paid')}
+            </span>
           </span>
         </div>
         <div className={classes.quotaMessage}>{t('xai_quota.paid_health')}</div>
@@ -191,9 +193,11 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
       )}
       {typeof billing.prepaidBalanceCents === 'number' && billing.prepaidBalanceCents > 0 && (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('xai_quota.prepaid')}</span>
-          <span className={classes.quotaAmount}>
-            {formatUsdFromCents(billing.prepaidBalanceCents)}
+          <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanLabel}>{t('xai_quota.prepaid')}</span>
+            <span className={classes.codexPlanValue}>
+              {formatUsdFromCents(billing.prepaidBalanceCents)}
+            </span>
           </span>
         </div>
       )}
@@ -259,8 +263,12 @@ export function XaiQuotaBody({ quota, classes }: QuotaBodyProps<XaiQuotaState>) 
         </div>
       ) : (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('xai_quota.pay_as_you_go_label')}</span>
-          <span className={classes.codexPlanValue}>{t('xai_quota.pay_as_you_go_disabled')}</span>
+          <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanLabel}>{t('xai_quota.pay_as_you_go_label')}</span>
+            <span className={classes.codexPlanValue}>
+              {t('xai_quota.pay_as_you_go_disabled')}
+            </span>
+          </span>
         </div>
       )}
       {hasMonthlyData && (

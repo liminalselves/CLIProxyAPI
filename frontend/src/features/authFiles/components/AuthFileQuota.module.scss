@@ -59,22 +59,122 @@ button.quotaMessageAction {
   overflow-wrap: anywhere;
 }
 
-.quotaCardActions {
+/* ---------- 头部：eyebrow 标签 + 紧凑工具（刷新/重置） ---------- */
+
+.quotaHead {
   display: flex;
-  justify-content: flex-end;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.quotaResetCreditButton {
-  font-size: $quota-font-size;
-  font-weight: 600;
-  white-space: nowrap;
+.quotaTitle {
+  font-family: $font-mono;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-quaternary);
+}
 
-  // Button wraps its icon and label in the final content span.
-  > span:last-child {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+.quotaTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 纯图标按钮：额度刷新是唯一入口，不挤占凭证操作区 */
+.quotaToolIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-tertiary);
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    background-color $transition-fast,
+    color $transition-fast;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quotaToolIcon:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  }
+}
+
+/* 文字 chip：重置额度属于有后果的动作，保留短标签而不退化为图标 */
+.quotaToolChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  background: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    border-color $transition-fast,
+    background-color $transition-fast,
+    color $transition-fast;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quotaToolChip:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+  }
+}
+
+.spinning {
+  animation: quota-section-spin 0.8s linear infinite;
+}
+
+@keyframes quota-section-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -344,7 +444,18 @@ button.quotaMessageAction {
 /* ---------- 降级 ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .quotaBarFill {
+  .quotaBarFill,
+  .quotaToolIcon,
+  .quotaToolChip {
     transition: none;
+  }
+
+  .quotaToolIcon:active:not(:disabled),
+  .quotaToolChip:active:not(:disabled) {
+    transform: none;
+  }
+
+  .spinning {
+    animation: none;
   }
 }

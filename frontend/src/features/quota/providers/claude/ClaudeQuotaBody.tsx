@@ -27,15 +27,19 @@ export function ClaudeQuotaBody({ quota, classes }: QuotaBodyProps<ClaudeQuotaSt
     <>
       {planType && (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('claude_quota.plan_label')}</span>
-          <span className={classes.codexPlanValue}>{t(`claude_quota.${planType}`)}</span>
+          <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanLabel}>{t('claude_quota.plan_label')}</span>
+            <span className={classes.codexPlanValue}>{t(`claude_quota.${planType}`)}</span>
+          </span>
         </div>
       )}
       {extraUsage && extraUsage.is_enabled && (
         <div className={classes.codexPlan}>
-          <span className={classes.codexPlanLabel}>{t('claude_quota.extra_usage_label')}</span>
-          <span className={classes.codexPlanValue}>
-            {`$${(extraUsage.used_credits / 100).toFixed(2)} / $${(extraUsage.monthly_limit / 100).toFixed(2)}`}
+          <span className={classes.codexPlanItem}>
+            <span className={classes.codexPlanLabel}>{t('claude_quota.extra_usage_label')}</span>
+            <span className={classes.codexPlanValue}>
+              {`$${(extraUsage.used_credits / 100).toFixed(2)} / $${(extraUsage.monthly_limit / 100).toFixed(2)}`}
+            </span>
           </span>
         </div>
       )}

@@ -8,10 +8,9 @@ import {
   useNotificationStore,
 } from '@/stores';
 import type { AuthFileItem } from '@/types';
-import { getStatusFromError } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { buildQuotaResetConfirmation, quotaResetParams } from '../quotaResetConfirmation';
-import { enrichQuotaInBackground } from '../quotaEnrichment';
+import { runQuotaRefresh } from '../quotaActions';
 import { getQuotaMap, getQuotaSetter, type QuotaAdapter, type QuotaCardState } from '../providers';
 
 const getQuotaState = (adapter: QuotaAdapter, file: AuthFileItem): QuotaCardState | undefined =>
@@ -29,41 +28,9 @@ export function useQuotaActions(disableControls: boolean) {
       const cacheKey = getQuotaCacheKey(file);
       if (resettingQuotaName === cacheKey) return;
       if (getQuotaState(adapter, file)?.status === 'loading') return;
-      const cacheGeneration = captureQuotaCacheGeneration(file.name);
-      const setQuota = getQuotaSetter(adapter);
-
-      setQuota((prev) => ({
-        ...prev,
-        [cacheKey]: adapter.buildLoadingState(),
-      }));
-
-      try {
-        const data = await adapter.fetchQuota(file, t);
-        commitIfQuotaCacheCurrent(cacheGeneration, () => {
-          const successState = adapter.buildSuccessState(data);
-          setQuota((prev) => ({
-            ...prev,
-            [cacheKey]: successState,
-          }));
-          void enrichQuotaInBackground(adapter, file, data, successState, t);
-          showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : t('common.unknown_error');
-        const status = getStatusFromError(err);
-        commitIfQuotaCacheCurrent(cacheGeneration, () => {
-          setQuota((prev) => ({
-            ...prev,
-            [cacheKey]: adapter.buildErrorState(message, status),
-          }));
-          showNotification(
-            t('auth_files.quota_refresh_failed', { name: file.name, message }),
-            'error'
-          );
-        });
-      }
+      await runQuotaRefresh(adapter, file, t);
     },
-    [disableControls, resettingQuotaName, showNotification, t]
+    [disableControls, resettingQuotaName, t]
   );
 
   const resetQuota = useCallback(
