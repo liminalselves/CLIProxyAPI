@@ -75,6 +75,7 @@ func (s *Server) registerHubRoutes() {
 	s.engine.GET("/hub.html", func(c *gin.Context) { c.Redirect(http.StatusFound, "/management.html") })
 	s.registerManagementV8Routes()
 	root := s.engine.Group("/v8/hub")
+	root.Use(jsonGzipMiddleware())
 	root.Use(s.hub.AuditMiddleware())
 	member := root.Group("")
 	member.Use(s.hub.Session())

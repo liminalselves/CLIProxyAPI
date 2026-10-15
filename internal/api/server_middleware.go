@@ -1,6 +1,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"net/http"
 	"strings"
 
@@ -121,6 +122,50 @@ func isExampleAPIKeySafeModeProxyPath(path string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// gzipResponseWriter compresses response bodies for bandwidth-constrained
+// management APIs. Streaming proxy endpoints never use it.
+type gzipResponseWriter struct {
+	gin.ResponseWriter
+	writer *gzip.Writer
+}
+
+func (w *gzipResponseWriter) Write(data []byte) (int, error) {
+	w.Header().Del("Content-Length")
+	return w.writer.Write(data)
+}
+
+func (w *gzipResponseWriter) WriteString(s string) (int, error) {
+	w.Header().Del("Content-Length")
+	return w.writer.Write([]byte(s))
+}
+
+func (w *gzipResponseWriter) WriteHeader(code int) {
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// jsonGzipMiddleware compresses request/response JSON APIs when the client
+// accepts gzip. Scope it to management route groups only; proxy and streaming
+// routes must stay uncompressed.
+func jsonGzipMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
+			c.Next()
+			return
+		}
+		gz := gzip.NewWriter(c.Writer)
+		defer func() {
+			if err := gz.Close(); err != nil {
+				log.WithError(err).Debug("failed to close gzip writer")
+			}
+		}()
+		c.Writer = &gzipResponseWriter{ResponseWriter: c.Writer, writer: gz}
+		c.Header("Content-Encoding", "gzip")
+		c.Header("Vary", "Accept-Encoding")
+		c.Next()
 	}
 }
 
