@@ -68,25 +68,28 @@ func (u *catalogUpdater) configure(ctx context.Context, source string) {
 }
 
 func (u *catalogUpdater) refresh(ctx context.Context, source string, generation uint64) {
+	if errRefresh := u.refreshWithError(ctx, source, generation); errRefresh != nil && ctx.Err() == nil {
+		log.Warn("model catalog refresh failed; keeping last valid catalog")
+	}
+}
+
+func (u *catalogUpdater) refreshWithError(ctx context.Context, source string, generation uint64) error {
 	data, errFetch := u.fetch(ctx, source)
 	if errFetch != nil {
-		if ctx.Err() == nil {
-			log.Warn("model catalog refresh failed; keeping last valid catalog")
-		}
-		return
+		return errFetch
 	}
 	u.mu.Lock()
-	if generation != u.generation || ctx.Err() != nil {
+	if generation != u.generation || ctx.Err() != nil || (u.ctx != nil && u.ctx.Err() != nil) {
 		u.mu.Unlock()
-		return
+		return fmt.Errorf("model catalog source changed or refresh was canceled")
 	}
 	changed, errPublish := u.publish(data)
 	u.mu.Unlock()
 	if errPublish != nil {
-		log.Warn("model catalog rejected; keeping last valid catalog")
-		return
+		return errPublish
 	}
 	notifyModelRefresh(changed)
+	return nil
 }
 
 func readCatalogSource(ctx context.Context, source string) ([]byte, error) {

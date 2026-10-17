@@ -234,6 +234,13 @@ func (m *Manager) resolveOAuthUpstreamModel(auth *Auth, requestedModel string) s
 }
 
 func (m *Manager) resolveOAuthModelAliasWithResult(auth *Auth, requestedModel string) OAuthModelAliasResult {
+	if models, configured := auth.CredentialModels(); configured {
+		entries := make([]modelAliasEntry, 0, len(models))
+		for _, model := range models {
+			entries = append(entries, credentialModelAliasEntry{model})
+		}
+		return resolveModelAliasResultFromConfigModels(requestedModel, entries)
+	}
 	channel := modelAliasChannel(auth)
 	if channel == "" {
 		return OAuthModelAliasResult{}

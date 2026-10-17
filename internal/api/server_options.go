@@ -14,19 +14,20 @@ import (
 )
 
 type serverOptionConfig struct {
-	extraMiddleware       []gin.HandlerFunc
-	engineConfigurator    func(*gin.Engine)
-	routerConfigurator    func(*gin.Engine, *handlers.BaseAPIHandler, *config.Config)
-	requestLoggerFactory  func(*config.Config, string) logging.RequestLogger
-	localPassword         string
-	keepAliveEnabled      bool
-	keepAliveTimeout      time.Duration
-	keepAliveOnTimeout    func()
-	postAuthHook          auth.PostAuthHook
-	postAuthPersistHook   auth.PostAuthHook
-	pluginHost            *pluginhost.Host
-	configReloadHook      func(context.Context, *config.Config)
-	exampleAPIKeySafeMode bool
+	extraMiddleware        []gin.HandlerFunc
+	engineConfigurator     func(*gin.Engine)
+	routerConfigurator     func(*gin.Engine, *handlers.BaseAPIHandler, *config.Config)
+	requestLoggerFactory   func(*config.Config, string) logging.RequestLogger
+	localPassword          string
+	keepAliveEnabled       bool
+	keepAliveTimeout       time.Duration
+	keepAliveOnTimeout     func()
+	postAuthHook           auth.PostAuthHook
+	postAuthPersistHook    auth.PostAuthHook
+	credentialModelCatalog auth.CredentialModelCatalogHook
+	pluginHost             *pluginhost.Host
+	configReloadHook       func(context.Context, *config.Config)
+	exampleAPIKeySafeMode  bool
 }
 
 // ServerOption customises HTTP server construction.
@@ -113,6 +114,11 @@ func WithPostAuthPersistHook(hook auth.PostAuthHook) ServerOption {
 	return func(cfg *serverOptionConfig) {
 		cfg.postAuthPersistHook = hook
 	}
+}
+
+// WithCredentialModelCatalog connects model management to the service catalog lifecycle.
+func WithCredentialModelCatalog(hook auth.CredentialModelCatalogHook) ServerOption {
+	return func(cfg *serverOptionConfig) { cfg.credentialModelCatalog = hook }
 }
 
 // WithPluginHost registers dynamic plugin HTTP adapters with the server.

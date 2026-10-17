@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconChevronDown, IconPlus, IconX } from '@/components/ui/icons';
 import { ModelAdvancedFields } from './ModelAdvancedFields';
+import type { ProviderModelCapabilities } from '../../descriptors';
 import type { ModelEntryInput, ProviderBrand } from '../../types';
 import styles from './sharedForm.module.scss';
 
@@ -13,12 +14,17 @@ interface ModelEntriesEditorProps {
   oauthAliasOnly?: boolean;
   aliasRequired?: boolean;
   providerBrand?: ProviderBrand;
+  /** Overrides the brand-derived capability set (e.g. credential model management). */
+  capabilities?: ProviderModelCapabilities;
   /** Only OpenAI-compatible entries can expose the image-generation capability. */
   supportsImage: boolean;
   /** Every backend provider model can override its thinking capability. */
   supportsThinking: boolean;
   mutating: boolean;
   removeDisabled: boolean;
+  /** Datalist id with upstream model id suggestions for the name field. */
+  nameListId?: string;
+  addDisabled?: boolean;
   onUpdate: (idx: number, patch: Partial<ModelEntryInput>) => void;
   onAdd: () => void;
   onRemove: (idx: number) => void;
@@ -29,10 +35,13 @@ export function ModelEntriesEditor({
   oauthAliasOnly = false,
   aliasRequired = oauthAliasOnly,
   providerBrand = 'gemini',
+  capabilities,
   supportsImage,
   supportsThinking,
   mutating,
   removeDisabled,
+  nameListId,
+  addDisabled = false,
   onUpdate,
   onAdd,
   onRemove,
@@ -76,6 +85,7 @@ export function ModelEntriesEditor({
                   placeholder={t('providersPage.modelOptions.modelName')}
                   aria-label={t('providersPage.modelOptions.modelNameLabel')}
                   value={entry.name}
+                  list={nameListId}
                   onChange={(e) => onUpdate(idx, { name: e.target.value })}
                   disabled={mutating}
                 />
@@ -163,6 +173,7 @@ export function ModelEntriesEditor({
                   providerBrand={providerBrand}
                   disabled={mutating}
                   supportsThinking={supportsThinking}
+                  capabilities={capabilities}
                   onUpdate={(patch) => onUpdate(idx, patch)}
                 />
               </div>
@@ -177,7 +188,12 @@ export function ModelEntriesEditor({
             : t('providersPage.form.showAllEntries', { count: models.length })}
         </button>
       ) : null}
-      <button type="button" className={styles.addBtn} disabled={mutating} onClick={handleAdd}>
+      <button
+        type="button"
+        className={styles.addBtn}
+        disabled={mutating || addDisabled}
+        onClick={handleAdd}
+      >
         <IconPlus size={12} />
         <span>{t('providersPage.form.addModel')}</span>
       </button>

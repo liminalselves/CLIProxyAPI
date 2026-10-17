@@ -100,7 +100,13 @@ func TestHubAccountsCredentialsRoutingAndTransparentUsage(t *testing.T) {
 		registry.GetGlobalRegistry().RegisterClient(a.ID, "codex", models)
 		return nil
 	}
-	s := NewServer(cfg, manager, sdkaccess.NewManager(), filepath.Join(dir, "config.yaml"), WithPostAuthPersistHook(syncModels))
+	discoverCalls := 0
+	s := NewServer(cfg, manager, sdkaccess.NewManager(), filepath.Join(dir, "config.yaml"), WithPostAuthPersistHook(syncModels), WithCredentialModelCatalog(func(_ context.Context, _ *auth.Auth, refresh bool) (*auth.CredentialModelCatalog, error) {
+		if refresh {
+			discoverCalls++
+		}
+		return &auth.CredentialModelCatalog{Models: []*registry.ModelInfo{{ID: "gpt-5"}, {ID: "gpt-4"}}, Source: registry.ModelCatalogStatus{Kind: "remote_catalog", SupportsRefresh: true}}, nil
+	}))
 	t.Cleanup(func() {
 		for _, a := range manager.List() {
 			registry.GetGlobalRegistry().UnregisterClient(a.ID)
@@ -222,6 +228,23 @@ func TestHubAccountsCredentialsRoutingAndTransparentUsage(t *testing.T) {
 		}
 	}
 	aliceRoute := base64.RawURLEncoding.EncodeToString([]byte(aliceID))
+	modelPath := "/v8/hub/credentials/" + aliceRoute + "/models"
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodPost} {
+		path := modelPath
+		if method == http.MethodPost {
+			path += "/discover"
+		}
+		request(method, path, "", `{"models":[]}`, 401)
+		request(method, path, bobSession, `{"models":[]}`, 403)
+	}
+	request(http.MethodGet, modelPath, aliceSession, "", 200)
+	request(http.MethodPut, modelPath, aliceSession, `{"models":[{"name":"gpt-5","alias":"my-model"}]}`, 200)
+	request(http.MethodPatch, modelPath, aliceSession, `{"models":[{"name":"gpt-4"}]}`, 200)
+	request(http.MethodPost, modelPath+"/discover", aliceSession, "", 200)
+	request(http.MethodDelete, modelPath, aliceSession, "", 200)
+	if discoverCalls != 1 {
+		t.Fatalf("credential model source refreshes = %d, want 1", discoverCalls)
+	}
 	request("PATCH", "/v8/hub/credentials/"+aliceRoute, bobSession, `{"disabled":true}`, 403)
 	request("PATCH", "/v8/hub/credentials/"+aliceRoute+"/fields", bobSession, `{"note":"not allowed"}`, 403)
 	request("PATCH", "/v8/hub/credentials/"+aliceRoute+"/fields", aliceSession, `{"owner":"bob"}`, 400)

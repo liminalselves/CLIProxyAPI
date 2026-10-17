@@ -212,16 +212,17 @@ Publishing or withdrawing a channel updates its credential metadata and model
 registrations. Individual credentials can be disabled or removed. An optional
 `enabled_models` array selects which base model names a credential publishes;
 omitting it publishes all discovered models. An empty array publishes none.
-In the channel detail page and the credential list, a manageable subscription
-credential's **Models** dialog reuses the provider model editor. Aliases change
-the callable model name while keeping the pinned source prefix and the upstream
-model name intact. Saving writes per-credential `model_aliases` through
-`/credentials/:route_id/fields` and refreshes registration; clearing an alias
-restores the original name or an inherited channel alias, rather than disabling
-the model. Advanced alias settings and mappings for temporarily unavailable
-models are preserved. Credential summaries expose `model_definitions` (public ID
-and upstream name) and `model_aliases` only to managers, without exporting the
-credential file.
+The backend also provides per-credential model selection, aliases, capability
+overrides, batch upsert/removal, source refresh, and reset through
+`/v8/hub/credentials/:route_id/models`. The complete request, response, inheritance,
+and discovery contract is documented in
+[Credential model management](management-api-v8.md#credential-model-management).
+These operations preserve the pinned source prefix and never export credential
+tokens. Managers receive `model_definitions`, `model_aliases`,
+`model_management_supported`, and, when configured, `model_config` in credential
+summaries. The current **Models** dialog remains alias-only and saves through
+`/credentials/:route_id/fields`; adopting the expanded API is a separate frontend
+task. With an explicit model list, its entries take precedence over those aliases.
 
 Existing credential files are not silently reassigned. They remain unclaimed and
 are not shared until an administrator explicitly assigns them to a channel.

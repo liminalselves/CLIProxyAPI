@@ -310,7 +310,13 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 	if ctx.Err() != nil {
 		return
 	}
-	models = applyOAuthModelAliasForAuth(s.cfg, provider, authKind, a.Attributes, models)
+	_, customModels := a.CredentialModels()
+	if customModels {
+		models = applyOAuthSettingsForAuth(s.cfg, provider, authKind, models)
+		models, _ = buildCredentialModels(a, models, excluded, false)
+	} else {
+		models = applyOAuthModelAliasForAuth(s.cfg, provider, authKind, a.Attributes, models)
+	}
 	if ctx.Err() != nil {
 		return
 	}
@@ -318,9 +324,13 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 	if key == "" {
 		key = strings.ToLower(strings.TrimSpace(a.Provider))
 	}
-	models = s.appendPluginModels(key, models)
+	if !customModels {
+		models = s.appendPluginModels(key, models)
+	}
 	if len(models) > 0 {
-		models = applyOAuthSettingsForAuth(s.cfg, provider, authKind, models)
+		if !customModels {
+			models = applyOAuthSettingsForAuth(s.cfg, provider, authKind, models)
+		}
 		s.registerResolvedModelsForAuth(a, key, applyModelPrefixes(models, a.Prefix, s.cfg != nil && s.cfg.ForceModelPrefix))
 		if strings.EqualFold(strings.TrimSpace(a.Provider), "antigravity") {
 			s.asyncProbeAntigravityCapabilities(ctx, a, key)

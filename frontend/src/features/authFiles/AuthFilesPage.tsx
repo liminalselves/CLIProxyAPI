@@ -730,7 +730,9 @@ export function AuthFilesPage() {
                 statusBarCache={statusBarCache}
                 entranceDelayMs={cardEntranceDelay(index)}
                 onShowModels={(file) => {
-                  if (account && file.manageable && file.kind !== 'provider') {
+                  // Administrators get the same model management as hub members;
+                  // credential kinds without support fall back to a read-only list.
+                  if (!account || (file.manageable && file.kind !== 'provider')) {
                     setSharedModelsFile(file as SharedCredential);
                   } else {
                     void showModels(file);

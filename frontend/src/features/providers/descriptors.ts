@@ -277,6 +277,7 @@ export interface ProviderModelCapabilities {
   isCompat: boolean;
   configurationUpdate: boolean;
   modalities: boolean;
+  maxCompletionTokens: boolean;
 }
 
 /** API-key model capabilities; aliases of CodexModel do not imply runtime support. */
@@ -285,6 +286,7 @@ export const getProviderModelCapabilities = (brand: ProviderBrand): ProviderMode
   isCompat: brand !== 'vertex',
   configurationUpdate: brand === 'codex',
   modalities: brand === 'openaiCompatibility',
+  maxCompletionTokens: brand === 'openaiCompatibility',
 });
 
 export const PROVIDER_BRAND_ORDER: ProviderBrand[] = [

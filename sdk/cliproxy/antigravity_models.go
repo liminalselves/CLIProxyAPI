@@ -10,6 +10,7 @@ import (
 	"maps"
 	"math/rand/v2"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -447,10 +448,16 @@ func (s *Service) antigravityModelsForHintsWithConfig(auth *coreauth.Auth, hints
 	if value := strings.TrimSpace(auth.Attributes["excluded_models"]); value != "" {
 		excluded = strings.Split(value, ",")
 	}
-	models = applyExcludedModels(models, excluded)
-	models = applyOAuthModelAliasForAuth(cfg, "antigravity", auth.AuthKind(), auth.Attributes, models)
-	models = s.appendPluginModels("antigravity", models)
-	models = applyOAuthSettingsForAuth(cfg, "antigravity", auth.AuthKind(), models)
+	_, customModels := auth.CredentialModels()
+	if customModels {
+		models = applyOAuthSettingsForAuth(cfg, "antigravity", auth.AuthKind(), models)
+		models, _ = buildCredentialModels(auth, models, excluded, true)
+	} else {
+		models = applyExcludedModels(models, excluded)
+		models = applyOAuthModelAliasForAuth(cfg, "antigravity", auth.AuthKind(), auth.Attributes, models)
+		models = s.appendPluginModels("antigravity", models)
+		models = applyOAuthSettingsForAuth(cfg, "antigravity", auth.AuthKind(), models)
+	}
 	return filterChannelModels(auth, applyModelPrefixes(models, auth.Prefix, cfg.ForceModelPrefix), cfg.MultiUser.Enabled)
 }
 
@@ -470,7 +477,8 @@ func antigravityAuthModelSettingsEqual(a, b *coreauth.Auth) bool {
 	return a != nil && b != nil && a.Provider == b.Provider && a.Prefix == b.Prefix &&
 		a.RegistrationEpoch == b.RegistrationEpoch && a.Disabled == b.Disabled &&
 		(a.Status == coreauth.StatusDisabled) == (b.Status == coreauth.StatusDisabled) &&
-		a.AuthKind() == b.AuthKind() && maps.Equal(a.Attributes, b.Attributes)
+		a.AuthKind() == b.AuthKind() && maps.Equal(a.Attributes, b.Attributes) &&
+		reflect.DeepEqual(a.Metadata["models"], b.Metadata["models"])
 }
 
 func (s *Service) applyAntigravityModelHints(ctx context.Context, auth *coreauth.Auth, providerKey string, hints antigravityModelCapabilityHints, expectedKey string, expectedEpoch, expectedRegEpoch uint64) {

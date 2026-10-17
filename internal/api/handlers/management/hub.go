@@ -382,6 +382,10 @@ func (h *Handler) HubCredentials(c *gin.Context) {
 		item["models"] = models
 		if manageable && kind != "provider" {
 			item["model_definitions"] = definitions
+			if modelConfig, configured := a.CredentialModels(); configured {
+				item["model_config"] = modelConfig
+			}
+			item["model_management_supported"] = coreauth.SupportsCredentialModels(a)
 			item["model_aliases"] = a.Metadata["model_aliases"]
 			if _, exists := a.Metadata["model_aliases"]; !exists {
 				item["model_aliases"] = a.Metadata["model-aliases"]

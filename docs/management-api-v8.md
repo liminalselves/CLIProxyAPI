@@ -102,7 +102,9 @@ retain the corresponding business operation's fields.
 | `/observability/usage/api-keys` | GET | Get API-key usage. |
 | `/observability/usage/queue` | GET | Get queued usage events. |
 | `/credentials` | GET, POST, DELETE | List, upload, or delete credential files. |
-| `/credentials/models` | GET | Get credential models. |
+| `/credentials/models` | GET | Get currently registered credential models. |
+| `/credentials/model-management?name=<file-or-id>` | GET, PUT, PATCH, DELETE | Read, replace, merge, or reset a credential's model configuration. |
+| `/credentials/models/discover?name=<file-or-id>` | POST | Refresh the credential's model source without replacing saved configuration. |
 | `/credentials/download` | GET | Download a credential file. |
 | `/credentials/status` | PATCH | Change credential status. |
 | `/credentials/fields` | PATCH | Change credential fields. |
@@ -118,6 +120,126 @@ retain the corresponding business operation's fields.
 | `/plugins/store/<id>/install` | POST | Install or update a plugin. |
 | `/plugins/<id>/quota` | GET, POST, DELETE | Read, fetch, or reset plugin quota. |
 | `/branding` | PUT | Replace site branding shown in the management panel. |
+
+## Credential model management
+
+The management endpoints above select a file-backed credential by `name`; optional
+`auth_index` disambiguates the lookup. In multi-user mode, the same operations are
+available at `/v8/hub/credentials/:route_id/models` (GET, PUT, PATCH, DELETE) and
+`/v8/hub/credentials/:route_id/models/discover` (POST). Use the credential summary's
+`route_id`, not its filename. Hub operations require credential owner, channel
+manager, or administrator access. Configuration-backed API keys, AI provider
+records, virtual plugin credentials, and Home-managed credentials are not supported
+by these endpoints.
+
+GET and successful writes return:
+
+- `models`: editable `{name, alias?, ...capabilities}` entries. `name` is the
+  upstream ID; `alias`, when set, is the callable base ID. Neither contains the
+  credential routing prefix. Without a saved override, entries derive from the
+  current catalog and existing per-credential/global aliases.
+- `configured`: whether the credential has an explicit `models` configuration.
+- `available_models`: source definitions with capability metadata, independent of
+  the saved selection and publication allowlist. Codex uses the credential's plan
+  catalog. Antigravity uses the verified account/catalog intersection.
+- `catalog_available`: whether a source catalog is known. `false` differs from an
+  authoritative empty account catalog; both have `available_models: []`.
+- `registered_models`: currently registered `{id, name}` entries. `id` is the
+  callable routing ID and `name` the upstream ID; publication, exclusions, and
+  disabled state still apply.
+- `source`: `{kind, auto_refresh, refresh_interval_seconds, supports_refresh,
+  upstream_discovery}`. Configured source URLs and credential tokens are omitted.
+- `enabled_models`, `excluded_models`: existing publication/exclusion policy,
+  returned for context but not edited by this endpoint.
+- `capabilities`: booleans for `manual_models`, `aliases`, `thinking`,
+  `max_context_length`, `modalities`, `is_compat`,
+  `support_configuration_update`, `merge`, and `reset`.
+
+PUT replaces the entire model selection. For example:
+
+```json
+{
+  "models": [
+    {
+      "name": "gpt-5",
+      "alias": "my-model",
+      "max-context-length": 200000,
+      "thinking": {"levels": ["low", "medium", "high"]},
+      "is-compat": false,
+      "support-configuration-update": false,
+      "input-modalities": ["text", "image"],
+      "output-modalities": ["text"]
+    },
+    {"name": "new-upstream-model"}
+  ]
+}
+```
+
+Optional fields inherit source capabilities when omitted or `null`; explicit
+`false`, empty modality arrays, and an empty `thinking` object are overrides.
+`max-context-length` must be positive. `thinking` uses the registry JSON shape:
+`min`, `max`, `levels`, `zero_allowed`, and `dynamic_allowed`. Modalities accept
+`text`, `image`, `audio`, `video`, and `document`. Levels and modalities are
+normalized and deduplicated. `support-configuration-update` is Codex-only. Manual
+entries are not proof of upstream availability. Antigravity advertises
+`manual_models: false`: entries absent from its verified source catalog cannot be
+registered, even if saved for later availability.
+
+An explicit `{"models":[]}` publishes no models. DELETE removes the explicit list
+and restores catalog-derived models and existing aliases. It does not clear
+`enabled_models`, `excluded_models`, or other credential settings. An explicit
+list takes precedence over legacy `model_aliases` and global aliases; those alias
+settings become effective again after DELETE. Configuration is persisted in the
+credential's `models` metadata and reapplied on model registration and file reload.
+Aliases retain the existing upstream-routing and response-model rewriting behavior.
+
+PATCH supports batch upsert and removal:
+
+```json
+{
+  "models": [{"name": "gpt-5", "alias": "second-name"}],
+  "remove": ["my-model"]
+}
+```
+
+Entries are keyed by the case-insensitive public name (`alias`, otherwise `name`).
+Removal runs before upsert. An upsert replaces the entire matching entry, so omitted
+capabilities inherit again; it is not a field-level merge. Other entries and their
+order are preserved. To rename an alias, remove its old public name and upsert the
+new entry. A removal-only PATCH is supported. Without an explicit list, PATCH
+starts from the current default entries; an unknown account catalog returns 503
+instead of silently treating the defaults as empty. PUT requires `models` and does
+not accept removals. Unknown fields, duplicate public names, `models: null`, and
+invalid capabilities return 400 without changing configuration.
+
+### Model source refresh
+
+POST discovery refreshes the active source and returns the same payload. It never
+adds, removes, or replaces saved model entries:
+
+| `source.kind` | Meaning |
+| --- | --- |
+| `remote_catalog` | Project-maintained remote directory, not an account-specific upstream `/models` call. |
+| `file_catalog` | Configured local directory file, reread on refresh. |
+| `builtin` | Embedded or code-defined models, including ZCode; no remote refresh. |
+| `disabled` | Shared directory refresh disabled by the active configuration. |
+| `account_upstream` | Antigravity account discovery, including account-specific capabilities. |
+
+Shared remote/file catalogs refresh every three hours and notify affected
+credentials when definitions change. A manual refresh uses the same publication
+path and configured source. The default `--local-model` policy remains effective;
+an explicitly configured source may override it. Refreshing a shared catalog can
+update other credentials using that catalog, not only the selected credential.
+Antigravity reuses its existing three-hour cache, in-flight deduplication, retry
+backoff, and stale-result guards; manual discovery expires the success cache but
+does not bypass failure backoff. A successful authoritative empty account catalog
+withdraws its registered models. Failed refreshes retain the last valid catalog.
+
+Unsupported operations or non-refreshable sources return 409. Refresh failures
+return 502, and unavailable catalogs required by the operation return 503. Existing
+`GET /credentials/models` and `/v0/management` contracts are unchanged. Existing
+alias-only dialogs keep their current endpoint; the expanded operations remain
+backend-only until a client adopts these new endpoints.
 
 ## Branding
 

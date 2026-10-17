@@ -56,6 +56,7 @@ type Handler struct {
 	logDir                  string
 	postAuthHook            coreauth.PostAuthHook
 	postAuthPersistHook     coreauth.PostAuthHook
+	credentialModelCatalog  coreauth.CredentialModelCatalogHook
 	pluginHost              *pluginhost.Host
 	configReloadHook        func(context.Context, *config.Config)
 	pluginStoreRegistryURL  string

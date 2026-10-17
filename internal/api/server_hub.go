@@ -88,6 +88,10 @@ func (s *Server) registerHubRoutes() {
 	member.GET("/credentials/:id/download", s.mgmt.HubDownloadCredential)
 	member.PATCH("/credentials/:id/fields", s.mgmt.HubPatchCredentialFields)
 	member.POST("/credentials/:id/refresh", s.mgmt.HubRefreshCredential)
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		member.Handle(method, "/credentials/:id/models", s.mgmt.CredentialModels)
+	}
+	member.POST("/credentials/:id/models/discover", s.mgmt.DiscoverCredentialModels)
 	member.POST("/credentials/:id/api-call", s.mgmt.HubQuotaAPICall)
 	member.DELETE("/credentials/:id", s.mgmt.HubDeleteCredential)
 	member.POST("/credentials/:id/claim", s.mgmt.HubClaimCredential)

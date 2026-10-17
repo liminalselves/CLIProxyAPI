@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/ui/Select';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
+import type { ProviderModelCapabilities } from '../../descriptors';
 import { getProviderModelCapabilities } from '../../descriptors';
 import { THINKING_LEVELS } from '../../thinkingLevels';
 import type { ModelEntryInput, ProviderBrand } from '../../types';
@@ -12,6 +13,8 @@ interface ModelAdvancedFieldsProps {
   providerBrand: ProviderBrand;
   disabled: boolean;
   supportsThinking: boolean;
+  /** Overrides the brand-derived set (e.g. credential model management). */
+  capabilities?: ProviderModelCapabilities;
   onUpdate: (patch: Partial<ModelEntryInput>) => void;
 }
 
@@ -20,11 +23,12 @@ export function ModelAdvancedFields({
   providerBrand,
   disabled,
   supportsThinking,
+  capabilities: capabilitiesOverride,
   onUpdate,
 }: ModelAdvancedFieldsProps) {
   const { t } = useTranslation();
   const id = useId();
-  const capabilities = getProviderModelCapabilities(providerBrand);
+  const capabilities = capabilitiesOverride ?? getProviderModelCapabilities(providerBrand);
   const enabled = entry.thinkingEnabled ?? Boolean(entry.thinkingJson?.trim());
   const levels = entry.thinkingLevels ?? [];
   const textField = (
@@ -95,7 +99,7 @@ export function ModelAdvancedFields({
           <p className={styles.thinkingExistingHint}>
             {t('providersPage.modelOptions.modalitiesHint')}
           </p>
-          {checkbox('useMaxCompletionTokens')}
+          {capabilities.maxCompletionTokens ? checkbox('useMaxCompletionTokens') : null}
         </>
       ) : null}
       {supportsThinking ? (
