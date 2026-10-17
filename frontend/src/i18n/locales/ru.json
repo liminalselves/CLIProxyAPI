@@ -2472,7 +2472,7 @@
     "owner": "Владелец",
     "owner_label": "Владелец",
     "page_size": "На странице",
-    "pagination": "Страница {{page}} · всего {{total}}",
+    "pagination": "Страница {{page}} / {{totalPages}} · всего {{total}}",
     "password": "Пароль",
     "password_hint": "После смены пароля все веб-сессии завершатся; API-ключи продолжат работать.",
     "per_channel_performance": "Производительность каналов",

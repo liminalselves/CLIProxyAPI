@@ -2476,7 +2476,7 @@
     "owner": "归属成员",
     "owner_label": "归属",
     "page_size": "每页",
-    "pagination": "第 {{page}} 页 · 共 {{total}} 条",
+    "pagination": "第 {{page}} / {{totalPages}} 页 · 共 {{total}} 条",
     "password": "密码",
     "password_hint": "修改密码后，所有网页登录会话都会退出；API Key 不受影响。",
     "per_channel_performance": "各渠道性能",

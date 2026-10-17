@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { paginate } from '@/utils/pagination';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
@@ -40,6 +41,10 @@ export function MarketplacePage() {
     () => groupMarketplaceModels(data?.models || [], { search, owner, provider }),
     [data, owner, provider, search]
   );
+  const { pageItems, currentPage } = useMemo(() => paginate(filtered, page, 50), [filtered, page]);
+  useEffect(() => {
+    if (!loading && !error && page !== currentPage) setPage(currentPage);
+  }, [loading, error, page, currentPage]);
   const performanceByModel = useMemo(
     () => new Map((data?.performance || []).map((entry) => [entry.model, entry])),
     [data]
@@ -105,7 +110,7 @@ export function MarketplacePage() {
       </Card>
       <LoadState loading={loading} error={error} />
       <div className={styles.grid}>
-        {filtered.slice((page - 1) * 50, page * 50).map((group) => (
+        {pageItems.map((group) => (
           <MarketplaceModelCard
             key={group.baseModel}
             group={group}
@@ -118,7 +123,9 @@ export function MarketplacePage() {
       {!loading && !filtered.length && (
         <EmptyState title={t('sharing.no_models')} description={t('sharing.no_models_hint')} />
       )}
-      {filtered.length > 50 && <Pager page={page} total={filtered.length} onPage={setPage} />}
+      {filtered.length > 50 && (
+        <Pager page={currentPage} total={filtered.length} onPage={setPage} />
+      )}
       {detail && (
         <MarketplacePerformance
           group={detail}

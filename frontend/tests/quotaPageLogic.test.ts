@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { QUOTA_PAGE_SIZE } from '@/features/quota/constants';
+import { paginate } from '@/utils/pagination';
 import {
   buildTabCounts,
   canRefreshQuotaAfterList,
@@ -8,7 +9,6 @@ import {
   filterEntriesBySearch,
   getQuotaDisplayParts,
   isQuotaRefreshDisabled,
-  paginate,
   resolveQuotaProviderType,
   sortQuotaEntries,
   type QuotaFileEntry,

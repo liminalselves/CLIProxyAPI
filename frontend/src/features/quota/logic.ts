@@ -144,21 +144,3 @@ export const getQuotaDisplayParts = (file: AuthFileItem): QuotaDisplayParts => {
   const suffix = full.startsWith(file.name) ? full.slice(file.name.length) : '';
   return { primary: pinned.title + suffix, secondary: pinned.subtitle, full };
 };
-
-export interface QuotaPagination<T> {
-  pageItems: T[];
-  currentPage: number;
-  totalPages: number;
-}
-
-/** Clamp pagination after list shrinkage instead of rendering an empty page. */
-export function paginate<T>(items: T[], page: number, pageSize: number): QuotaPagination<T> {
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const currentPage = Math.min(Math.max(1, page), totalPages);
-  const start = (currentPage - 1) * pageSize;
-  return {
-    pageItems: items.slice(start, start + pageSize),
-    currentPage,
-    totalPages,
-  };
-}

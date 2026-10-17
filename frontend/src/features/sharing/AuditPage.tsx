@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { getPagination } from '@/utils/pagination';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -23,8 +24,14 @@ export function AuditPage() {
   const [action, setAction] = useState('');
   const [filter, setFilter] = useState({ actor: '', action: '' });
   const { data, loading, error } = useSharingData(
-    useCallback(() => sharingApi.audits({ ...filter, page, page_size: 50 }), [filter, page])
+    useCallback(() => sharingApi.audits({ ...filter, page, page_size: 50 }), [filter, page]),
+    { keepPreviousData: false }
   );
+  useEffect(() => {
+    if (loading || error || !data) return;
+    const { currentPage } = getPagination(data.total, page, 50);
+    if (page !== currentPage) setPage(currentPage);
+  }, [data, loading, error, page]);
   return (
     <div className={styles.page}>
       <PageHeader title={t('sharing.audit')} hint={t('sharing.audit_hint')} />
@@ -73,7 +80,7 @@ export function AuditPage() {
           ))}
         </TableBody>
       </Table>
-      <Pager page={page} total={data?.total || 0} onPage={setPage} />
+      <Pager page={page} total={data?.total || 0} onPage={setPage} loading={loading} />
     </div>
   );
 }

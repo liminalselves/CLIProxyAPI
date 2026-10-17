@@ -461,6 +461,10 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earlierError, setEarlierError] = useState('');
+  const earlierPending = useRef(false);
+  const lifetime = useRef(0);
   const revision = useRef(0);
   const pageSize = 50;
 
@@ -470,8 +474,9 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
     async (merge: boolean) => {
       const id = ++revision.current;
       try {
+        const connection = apiClient.getConnectionRevision();
         const result = await sharingApi.boardMessages(channel.id, undefined, pageSize);
-        if (id !== revision.current) return;
+        if (id !== revision.current || connection !== apiClient.getConnectionRevision()) return;
         if (!merge) {
           setMessages(result.messages);
           setHasMore(result.messages.length >= pageSize);
@@ -493,25 +498,49 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
 
   useEffect(() => {
     const scope = revision;
+    const lifecycle = lifetime;
+    setMessages([]);
+    setHasMore(false);
+    setLoadingEarlier(false);
+    setEarlierError('');
+    earlierPending.current = false;
     void loadLatest(false);
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') void loadLatest(true);
     }, 15000);
     return () => {
       scope.current++;
+      lifecycle.current++;
       clearInterval(timer);
     };
   }, [loadLatest]);
 
   const loadEarlier = async () => {
     const oldest = messages[messages.length - 1];
-    if (!oldest) return;
-    const result = await sharingApi.boardMessages(channel.id, oldest.id, pageSize);
-    setMessages((current) => {
-      const known = new Set(current.map((message) => message.id));
-      return [...current, ...result.messages.filter((message) => !known.has(message.id))];
-    });
-    setHasMore(result.messages.length >= pageSize);
+    if (!oldest || !hasMore || earlierPending.current) return;
+    const generation = lifetime.current;
+    const connection = apiClient.getConnectionRevision();
+    const isCurrent = () =>
+      generation === lifetime.current && connection === apiClient.getConnectionRevision();
+    earlierPending.current = true;
+    setLoadingEarlier(true);
+    setEarlierError('');
+    try {
+      const result = await sharingApi.boardMessages(channel.id, oldest.id, pageSize);
+      if (!isCurrent()) return;
+      setMessages((current) => {
+        const known = new Set(current.map((message) => message.id));
+        return [...current, ...result.messages.filter((message) => !known.has(message.id))];
+      });
+      setHasMore(result.messages.length >= pageSize);
+    } catch (error) {
+      if (isCurrent()) setEarlierError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (isCurrent()) {
+        earlierPending.current = false;
+        setLoadingEarlier(false);
+      }
+    }
   };
 
   const send = async () => {
@@ -533,10 +562,16 @@ function BoardPanel({ channel, canModerate }: { channel: Channel; canModerate: b
     <Card className={styles.boardCard} title={t('sharing.board')}>
       <div className={styles.boardList}>
         {hasMore && (
-          <Button variant="ghost" size="sm" onClick={() => void loadEarlier()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={loadingEarlier}
+            onClick={() => void loadEarlier()}
+          >
             {t('sharing.load_earlier')}
           </Button>
         )}
+        <LoadState loading={false} error={earlierError} />
         {messages.length === 0 && <p className={styles.meta}>{t('sharing.no_messages')}</p>}
         {[...messages].reverse().map((message) => (
           <div key={message.id} className={styles.boardRow}>
@@ -930,7 +965,9 @@ export function ChannelDetailPage() {
                 </section>
               </>
             )}
-            {tab === 'board' && <BoardPanel channel={channel} canModerate={canManage} />}
+            {tab === 'board' && (
+              <BoardPanel key={channel.id} channel={channel} canModerate={canManage} />
+            )}
             {tab === 'manage' && (
               <ManagePanel
                 channel={channel}

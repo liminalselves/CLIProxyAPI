@@ -2478,7 +2478,7 @@
     "owner": "Owner",
     "owner_label": "Owner",
     "page_size": "Per page",
-    "pagination": "Page {{page}} · {{total}} total",
+    "pagination": "Page {{page}} / {{totalPages}} · {{total}} total",
     "password": "Password",
     "password_hint": "Changing the password signs out all web sessions; API keys are not affected.",
     "per_channel_performance": "Per-channel performance",

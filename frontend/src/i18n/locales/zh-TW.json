@@ -2502,7 +2502,7 @@
     "owner": "歸屬成員",
     "owner_label": "歸屬",
     "page_size": "每頁",
-    "pagination": "第 {{page}} 頁 · 共 {{total}} 筆",
+    "pagination": "第 {{page}} / {{totalPages}} 頁 · 共 {{total}} 筆",
     "password": "密碼",
     "password_hint": "修改密碼後，所有網頁登入工作階段都會登出；API Key 不受影響。",
     "per_channel_performance": "各渠道效能",

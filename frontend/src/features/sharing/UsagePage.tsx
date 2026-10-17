@@ -11,7 +11,9 @@ import { Sheet } from '@/components/ui/Sheet';
 import { useAuthStore } from '@/stores';
 import { sharingApi } from '@/services/api/sharing';
 import { formatCompactNumber } from '@/utils/format';
+import { normalizePaginationParams, parsePage, parsePageSize } from '@/utils/pagination';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import {
   Table,
   TableHeader,
@@ -238,9 +240,7 @@ function UsageDetailSheet({
               <span className={styles.mono}>{entry.reasoning_effort}</span>
             </Field>
           )}
-          {rate !== null && (
-            <Field label={t('sharing.field_generation_speed')}>{rate} t/s</Field>
-          )}
+          {rate !== null && <Field label={t('sharing.field_generation_speed')}>{rate} t/s</Field>}
           {entry.trace_id && (
             <Field label={t('sharing.field_trace')}>
               <span className={styles.mono}>{entry.trace_id}</span>
@@ -420,10 +420,15 @@ export function UsagePage() {
       : params.get('scope') === 'site' && isAdmin
         ? 'site'
         : 'mine';
-  const page = Number(params.get('page') || 1);
-  const pageSize = Number(params.get('page_size') || 50);
+  const page = parsePage(params.get('page'));
+  const pageSize = parsePageSize(params.get('page_size'));
   const appliedKeyID = params.get('key_id') || '';
   const queryString = params.toString();
+  const appliedModel = params.get('model') || '';
+  const appliedChannel = params.get('channel_id') || '';
+  const appliedConsumer = scope === 'mine' ? '' : params.get('consumer') || '';
+  const appliedFrom = params.get('from') || '';
+  const appliedTo = params.get('to') || '';
 
   const [model, setModel] = useState(params.get('model') || '');
   const [channelID, setChannelID] = useState(params.get('channel_id') || '');
@@ -433,6 +438,15 @@ export function UsagePage() {
   );
   const [customFrom, setCustomFrom] = useState(() => toDayInput(params.get('from'), 0));
   const [customTo, setCustomTo] = useState(() => toDayInput(params.get('to'), -1));
+
+  useEffect(() => {
+    setModel(appliedModel);
+    setChannelID(appliedChannel);
+    setKeyText(null);
+    setPreset(detectPreset(appliedFrom, appliedTo));
+    setCustomFrom(toDayInput(appliedFrom, 0));
+    setCustomTo(toDayInput(appliedTo, -1));
+  }, [appliedModel, appliedChannel, appliedKeyID, appliedConsumer, appliedFrom, appliedTo, scope]);
 
   const [options, setOptions] = useState<{
     channels: Channel[];
@@ -468,26 +482,50 @@ export function UsagePage() {
     };
   }, []);
 
-  // The summary feed drives the stat pills and the daily trend; the paged
-  // entry list loads alongside it.
-  const { data, loading, error } = useSharingData(
-    useCallback(async () => {
-      const values: Record<string, string | number> = {
-        ...Object.fromEntries(new URLSearchParams(queryString)),
-        page_size: pageSize,
-      };
-      delete values.scope;
-      if (scope === 'mine') values.consumer = me;
-      if (scope === 'contributed') values.owner = me;
-      const [summary, usage] = await Promise.all([
-        sharingApi.summary(values),
-        sharingApi.usage(values),
-      ]);
-      return { summary, usage };
-    }, [queryString, scope, me, pageSize])
+  const filterQuery = useMemo(() => {
+    const values = new URLSearchParams(queryString);
+    values.delete('page');
+    values.delete('page_size');
+    values.delete('scope');
+    if (scope === 'mine') values.set('consumer', me);
+    if (scope === 'contributed') values.set('owner', me);
+    return values.toString();
+  }, [queryString, scope, me]);
+  const {
+    data: summary,
+    loading: summaryLoading,
+    error: summaryError,
+    refresh: refreshSummary,
+  } = useSharingData(
+    useCallback(
+      () => sharingApi.summary(Object.fromEntries(new URLSearchParams(filterQuery))),
+      [filterQuery]
+    ),
+    { keepPreviousData: false, headerRefresh: false }
   );
+  const {
+    data: usage,
+    loading,
+    error,
+    refresh: refreshUsage,
+  } = useSharingData(
+    useCallback(
+      () =>
+        sharingApi.usage({
+          ...Object.fromEntries(new URLSearchParams(filterQuery)),
+          page,
+          page_size: pageSize,
+        }),
+      [filterQuery, page, pageSize]
+    ),
+    { keepPreviousData: false, headerRefresh: false }
+  );
+  useEffect(() => {
+    const next = normalizePaginationParams(params, !loading && !error ? usage?.total : undefined);
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+  }, [params, setParams, usage, loading, error]);
 
-  const groups = useMemo(() => data?.summary.groups ?? [], [data]);
+  const groups = useMemo(() => summary?.groups ?? [], [summary]);
 
   // Model suggestions use a summary that ignores the applied model filter and
   // pagination, so choosing a model never shrinks the dropdown to itself.
@@ -495,11 +533,17 @@ export function UsagePage() {
     () => buildModelCandidateQuery(queryString, scope, me),
     [queryString, scope, me]
   );
-  const { data: candidateSummary } = useSharingData(
+  const { data: candidateSummary, refresh: refreshCandidates } = useSharingData(
     useCallback(
       () => sharingApi.summary(Object.fromEntries(new URLSearchParams(candidateQuery))),
       [candidateQuery]
-    )
+    ),
+    { keepPreviousData: false, headerRefresh: false }
+  );
+  useHeaderRefresh(
+    useCallback(async () => {
+      await Promise.all([refreshSummary(), refreshUsage(), refreshCandidates()]);
+    }, [refreshSummary, refreshUsage, refreshCandidates])
   );
 
   // Candidates pair every bare model (even load balancing) with each channel
@@ -535,7 +579,6 @@ export function UsagePage() {
     ];
   }, [options, scope, keyLabel]);
   const keyFilterOptions = useMemo(() => keyOptions.map((option) => option.label), [keyOptions]);
-  const appliedConsumer = scope === 'mine' ? '' : params.get('consumer') || '';
   const keyText =
     keyDraft ??
     (appliedKeyID
@@ -554,6 +597,7 @@ export function UsagePage() {
     if (resolvedModel === null || resolvedKey === null) return;
     const next = new URLSearchParams();
     if (scope !== 'mine') next.set('scope', scope);
+    if (pageSize !== 50) next.set('page_size', String(pageSize));
     if (resolvedModel) next.set('model', resolvedModel);
     if (channelID) next.set('channel_id', channelID);
     if (resolvedKey.keyId) next.set('key_id', resolvedKey.keyId);
@@ -582,6 +626,7 @@ export function UsagePage() {
     setCustomTo('');
     const next = new URLSearchParams();
     if (scope !== 'mine') next.set('scope', scope);
+    if (pageSize !== 50) next.set('page_size', String(pageSize));
     setParams(next);
   };
 
@@ -604,7 +649,7 @@ export function UsagePage() {
     setParams(next);
   };
 
-  const total = data?.summary.total;
+  const total = summary?.total;
   const failureRate =
     total && total.executions > 0 ? (total.failures / total.executions) * 100 : null;
   const tokenHint = total
@@ -698,15 +743,11 @@ export function UsagePage() {
             />
           </div>
           <AutocompleteInput
-            label={
-              scope === 'mine' ? t('sharing.key_label') : t('sharing.key_member_label')
-            }
+            label={scope === 'mine' ? t('sharing.key_label') : t('sharing.key_member_label')}
             value={keyText}
             onChange={setKeyText}
             options={keyFilterOptions}
-            placeholder={
-              scope === 'mine' ? t('sharing.all_keys') : t('sharing.key_or_member')
-            }
+            placeholder={scope === 'mine' ? t('sharing.all_keys') : t('sharing.key_or_member')}
             clearLabel={t('sharing.clear_filter')}
           />
           <div className={styles.actions}>
@@ -752,16 +793,16 @@ export function UsagePage() {
         </div>
       </Card>
       <Card title={t('sharing.trend_title')}>
-        {loading && !data ? null : <DailyTrend groups={groups} />}
+        {summaryLoading && !summary ? null : <DailyTrend groups={groups} />}
       </Card>
-      <LoadState loading={loading} error={error} />
-      {!loading && !data?.usage?.items.length && (
+      <LoadState loading={loading || summaryLoading} error={error || summaryError} />
+      {!loading && !error && !usage?.items.length && (
         <EmptyState title={t('sharing.no_records')} description={t('sharing.no_records_hint')} />
       )}
-      {Boolean(data?.usage?.items.length) &&
+      {Boolean(usage?.items.length) &&
         (isMobile ? (
           <div className={styles.keyCards}>
-            {data?.usage?.items.map((entry) => (
+            {usage?.items.map((entry) => (
               <UsageLogCard
                 key={entry.id}
                 entry={entry}
@@ -782,7 +823,7 @@ export function UsagePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.usage?.items.map((entry) => (
+              {usage?.items.map((entry) => (
                 <UsageLogRow
                   key={entry.id}
                   entry={entry}
@@ -795,12 +836,14 @@ export function UsagePage() {
         ))}
       <Pager
         page={page}
-        total={data?.usage?.total || 0}
+        total={usage?.total || 0}
         pageSize={pageSize}
+        loading={loading}
         onPageSize={setPageSize}
         onPage={(value) => {
           const next = new URLSearchParams(params);
-          next.set('page', String(value));
+          if (value === 1) next.delete('page');
+          else next.set('page', String(value));
           setParams(next);
         }}
       />

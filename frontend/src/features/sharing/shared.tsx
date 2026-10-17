@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
 import { number } from './hooks';
+import { getPagination } from '@/utils/pagination';
 import type { Summary } from './types';
 import styles from './Sharing.module.scss';
 
@@ -43,25 +44,36 @@ export function Pager({
   pageSize = 50,
   onPage,
   onPageSize,
+  loading = false,
 }: {
   page: number;
   total: number;
   pageSize?: number;
   onPage: (page: number) => void;
   onPageSize?: (size: number) => void;
+  loading?: boolean;
 }) {
   const { t } = useTranslation();
+  const { totalPages } = getPagination(total, page, pageSize);
+  const label = t('sharing.pagination', { page, total, totalPages });
   return (
-    <div className={styles.pager}>
-      <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        {t('auth_files.pagination_prev')}
-      </Button>
-      <span>{t('sharing.pagination', { page, total })}</span>
+    <nav className={styles.pager} aria-label={label} aria-busy={loading}>
       <Button
         variant="secondary"
         size="sm"
-        disabled={page * pageSize >= total}
-        onClick={() => onPage(page + 1)}
+        disabled={loading || page <= 1}
+        onClick={() => onPage(Math.max(1, page - 1))}
+      >
+        {t('auth_files.pagination_prev')}
+      </Button>
+      <span role="status" aria-live="polite" aria-atomic="true">
+        {loading ? t('common.loading') : label}
+      </span>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={loading || page >= totalPages}
+        onClick={() => onPage(Math.min(totalPages, page + 1))}
       >
         {t('auth_files.pagination_next')}
       </Button>
@@ -72,11 +84,14 @@ export function Pager({
             value={String(pageSize)}
             onChange={(value) => onPageSize(Number(value))}
             ariaLabel={t('sharing.page_size')}
-            options={['50', '100', '200'].map((value) => ({ value, label: value }))}
+            disabled={loading}
+            options={[...new Set([pageSize, 50, 100, 200])]
+              .sort((a, b) => a - b)
+              .map((value) => ({ value: String(value), label: String(value) }))}
           />
         </span>
       )}
-    </div>
+    </nav>
   );
 }
 

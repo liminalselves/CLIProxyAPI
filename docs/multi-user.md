@@ -354,3 +354,15 @@ Model choices retain the existing requested-model matching; a trailing
 bare-model calls. There is no fuzzy Key-name history query. Model candidates come
 from a summary that ignores the applied `model` filter and pagination, so
 narrowing the list never collapses the dropdown to the selected model.
+
+Pagination uses one-based pages (maximum 1,000,000) and sizes from 1 to 200,
+with a default size of 50. The usage page normalizes invalid URL parameters,
+returns to the last valid page after a successful response reports fewer records,
+and preserves the selected size when applying or clearing filters. Browser history
+restores the applied filters. Page changes fetch entries without refetching summaries;
+the header refresh reloads entries, statistics, and model candidates together.
+Usage and audit pagination hide the previous page while loading and disable page
+controls until the request settles. Local credential, quota, and marketplace lists
+also synchronize their stored page after shrinkage, so later growth cannot restore
+an obsolete page. Board history allows one earlier-message request at a time,
+retains messages on failure, and ignores responses from a previous channel or connection.

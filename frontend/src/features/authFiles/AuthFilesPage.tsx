@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { copyToClipboard } from '@/utils/clipboard';
+import { paginate } from '@/utils/pagination';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import {
   QUOTA_PROVIDER_TYPES,
@@ -63,7 +64,7 @@ import { ChannelPicker } from '@/features/sharing/ChannelPicker';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 const SKELETON_CARD_COUNT = 6;
-/** 首屏卡片级联入场总预算，与 useRevealGroup 同一 360ms 语汇。 */
+/** First-paint card stagger shares the 360ms reveal budget. */
 const CARD_ENTRANCE_BUDGET_MS = 360;
 
 const resolveStatusFilterMode = (
@@ -205,7 +206,7 @@ export function AuthFilesPage() {
   const disabledOnly = statusFilterMode === 'disabled';
   const enabledOnly = statusFilterMode === 'enabled';
 
-  /* ---------- uiState 水合与持久化（localStorage key/形状与旧版完全一致） ---------- */
+  /* ---------- UI state hydration and persistence ---------- */
 
   useEffect(() => {
     const persistedCompactMode = readPersistedAuthFilesCompactMode();
@@ -325,31 +326,14 @@ export function AuthFilesPage() {
       const next = clampCardPageSize(value);
       setCurrentModePageSize(next);
       setPageSizeInput(String(next));
-      setPage(1);
+      if (next !== pageSize) setPage(1);
     },
     [pageSize, setCurrentModePageSize]
   );
 
-  const handlePageSizeChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const rawValue = event.currentTarget.value;
-      setPageSizeInput(rawValue);
-
-      const trimmed = rawValue.trim();
-      if (!trimmed) return;
-
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed)) return;
-
-      const rounded = Math.round(parsed);
-      // 超出 [MIN, MAX] 时不提交（clamp 后不等于原值即越界）
-      if (clampCardPageSize(rounded) !== rounded) return;
-
-      setCurrentModePageSize(rounded);
-      setPage(1);
-    },
-    [setCurrentModePageSize]
-  );
+  const handlePageSizeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setPageSizeInput(event.currentTarget.value);
+  }, []);
 
   const handleSortModeChange = useCallback(
     (value: string) => {
@@ -365,7 +349,7 @@ export function AuthFilesPage() {
     setPage(1);
   }, []);
 
-  /* ---------- 数据加载：首载前台（骨架屏），此后一律后台（不清空网格） ---------- */
+  /* ---------- Initial foreground load, then background refreshes ---------- */
 
   const initialLoadDoneRef = useRef(false);
 
@@ -390,7 +374,7 @@ export function AuthFilesPage() {
     isCurrentLayer ? 240_000 : null
   );
 
-  /* ---------- 过滤 / 排序 / 分页 memos ---------- */
+  /* ---------- Filtering, sorting and pagination ---------- */
 
   const existingTypes = useMemo(() => {
     const types = new Set<string>(['all']);
@@ -457,10 +441,15 @@ export function AuthFilesPage() {
 
   const sorted = useMemo(() => sortAuthFiles(filtered, sortMode), [filtered, sortMode]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * pageSize;
-  const pageItems = useMemo(() => sorted.slice(start, start + pageSize), [pageSize, sorted, start]);
+  const { currentPage, totalPages, pageItems } = useMemo(
+    () => paginate(sorted, page, pageSize),
+    [sorted, page, pageSize]
+  );
+  useEffect(() => {
+    if (uiStateHydrated && !loading && !refreshing && !error && page !== currentPage) {
+      setPage(currentPage);
+    }
+  }, [uiStateHydrated, loading, refreshing, error, page, currentPage]);
   const selectablePageItems = useMemo(
     () =>
       pageItems.filter(
@@ -490,15 +479,13 @@ export function AuthFilesPage() {
     batchStatusUpdating ||
     selectedHasStatusUpdating;
 
-  /* ---------- 头部遥测计数 ---------- */
+  /* ---------- Header counters ---------- */
 
   const activeCount = useMemo(() => files.filter((file) => file.disabled !== true).length, [files]);
   const problemCount = useMemo(() => files.filter(isProblemAuthFile).length, [files]);
 
-  /* ---------- 首屏卡片一次性级联入场 ----------
-   * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过
-   * 自己的延迟（AuthFileCard 内 useState 初始化），不受后续 null 影响，
-   * 而过滤/翻页/轮询新挂载的卡片拿到 null——不重播。 */
+  /* Cards capture their delay on mount; later filtering, pagination and polling
+   * must not replay the first-paint entrance. */
 
   const [cardsAnimated, setCardsAnimated] = useState(false);
   const enableCardEntrance = !cardsAnimated && isCurrentLayer && !loading && pageItems.length > 0;
@@ -513,7 +500,7 @@ export function AuthFilesPage() {
     return Math.round((index / (pageItems.length - 1)) * CARD_ENTRANCE_BUDGET_MS);
   };
 
-  /* ---------- 杂项 ---------- */
+  /* ---------- Other actions ---------- */
 
   const copyTextWithNotification = useCallback(
     async (text: string) => {

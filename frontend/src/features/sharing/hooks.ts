@@ -22,28 +22,46 @@ export const number = (value: number | undefined) => Number(value || 0).toLocale
 export const duration = (ms: number) =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${number(ms)}ms`;
 
-export function useSharingData<T>(loader: () => Promise<T>) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+export function useSharingData<T>(
+  loader: () => Promise<T>,
+  {
+    keepPreviousData = true,
+    headerRefresh = true,
+  }: {
+    keepPreviousData?: boolean;
+    headerRefresh?: boolean;
+  } = {}
+) {
+  const [state, setState] = useState<{
+    loader: typeof loader;
+    data: T | null;
+    error: string;
+    loading: boolean;
+  }>({ loader, data: null, error: '', loading: true });
   const revision = useRef(0);
   const refresh = useCallback(async () => {
     const id = ++revision.current;
     const connection = apiClient.getConnectionRevision();
-    setLoading(true);
+    const isCurrent = () =>
+      id === revision.current && connection === apiClient.getConnectionRevision();
+    setState((current) => ({
+      loader,
+      data: keepPreviousData || current.loader === loader ? current.data : null,
+      error: '',
+      loading: true,
+    }));
     try {
-      const result = await loader();
-      if (id !== revision.current || connection !== apiClient.getConnectionRevision()) return;
-      setData(result);
-      setError('');
+      const data = await loader();
+      if (isCurrent()) setState({ loader, data, error: '', loading: false });
     } catch (error) {
-      if (id === revision.current && connection === apiClient.getConnectionRevision())
-        setError(error instanceof Error ? error.message : String(error));
-    } finally {
-      if (id === revision.current && connection === apiClient.getConnectionRevision())
-        setLoading(false);
+      if (isCurrent())
+        setState((current) => ({
+          ...current,
+          error: error instanceof Error ? error.message : String(error),
+          loading: false,
+        }));
     }
-  }, [loader]);
+  }, [loader, keepPreviousData]);
   useEffect(() => {
     const scope = revision;
     void refresh();
@@ -51,8 +69,14 @@ export function useSharingData<T>(loader: () => Promise<T>) {
       scope.current++;
     };
   }, [refresh]);
-  useHeaderRefresh(refresh);
-  return { data, loading, error, refresh };
+  useHeaderRefresh(refresh, headerRefresh);
+  const matchesLoader = state.loader === loader;
+  return {
+    data: keepPreviousData || matchesLoader ? state.data : null,
+    loading: !matchesLoader || state.loading,
+    error: matchesLoader ? state.error : '',
+    refresh,
+  };
 }
 
 export function useSharingActions(refresh: () => Promise<void>) {

@@ -36,7 +36,6 @@ import {
   classifyQuotaFiles,
   filterEntriesByTab,
   filterEntriesBySearch,
-  paginate,
   sortQuotaEntries,
   type QuotaFileEntry,
 } from './logic';
@@ -47,6 +46,7 @@ import { useDevinQuotaAutoLoad } from './providers/devin/useDevinQuotaAutoLoad';
 import { useQuotaActions } from './hooks/useQuotaActions';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
 import { readQuotaUiState, writeQuotaUiState } from './uiState';
+import { paginate } from '@/utils/pagination';
 import styles from './QuotaPage.module.scss';
 
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
@@ -186,6 +186,12 @@ export function QuotaPage() {
     () => paginate(sortedEntries, page, QUOTA_PAGE_SIZE),
     [sortedEntries, page]
   );
+
+  useEffect(() => {
+    if (!loading && !error && filesGeneration === sessionGeneration && page !== currentPage) {
+      setPage(currentPage);
+    }
+  }, [loading, error, filesGeneration, sessionGeneration, page, currentPage]);
 
   const handleTabChange = useCallback((next: string) => {
     setTab(next as QuotaTabId);
