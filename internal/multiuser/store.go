@@ -44,6 +44,9 @@ type APIKey struct {
 	Owner string `json:"owner"`
 	Name  string `json:"name"`
 	Hint  string `json:"hint"`
+	// Secret is the full key material, kept so its owner can copy it again at
+	// any time. Keys created before this field existed have it empty.
+	Secret string `json:"secret,omitempty"`
 	// AutoBalance lets the key call bare base model names; requests are spread
 	// evenly across every published credential serving that model, with
 	// failover to the remaining ones when an attempt fails.
@@ -422,7 +425,7 @@ func (s *Store) CreateKey(actor User, name string) (APIKey, string, error) {
 	if err != nil {
 		return APIKey{}, "", err
 	}
-	key := APIKey{ID: id, Owner: actor.Username, Name: name, Hint: secret[:10] + "…" + secret[len(secret)-4:], CreatedAt: s.now().UTC()}
+	key := APIKey{ID: id, Owner: actor.Username, Name: name, Hint: secret[:10] + "…" + secret[len(secret)-4:], Secret: secret, CreatedAt: s.now().UTC()}
 	err = s.mutate(func(d *state) error {
 		u, ok := d.Users[actor.Username]
 		if !ok || u.Disabled {

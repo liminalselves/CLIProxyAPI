@@ -89,12 +89,21 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if _, key, ok := reopened.AuthenticateKey(secret); !ok || !key.AutoBalance {
 		t.Fatal("key or its auto balance flag did not survive restart")
 	}
+	listed := reopened.Keys(bob)
+	if len(listed) != 2 || listed[0].Secret == "" || listed[1].Secret == "" {
+		t.Fatal("stored keys must keep their secret so owners can copy them again")
+	}
+	for _, key := range listed {
+		if key.ID == first.ID && key.Secret != secret {
+			t.Fatal("listed key secret does not match the one returned at creation")
+		}
+	}
 	raw, err := os.ReadFile(filepath.Join(s.dir, "accounts.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), secret) || strings.Contains(string(raw), sessionToken) || strings.Contains(string(raw), "password-bob") {
-		t.Fatal("account store contains plaintext key, session, or password")
+	if strings.Contains(string(raw), sessionToken) || strings.Contains(string(raw), "password-bob") {
+		t.Fatal("account store contains plaintext session or password")
 	}
 	if err := s.UpdateKey(admin, first.ID, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)

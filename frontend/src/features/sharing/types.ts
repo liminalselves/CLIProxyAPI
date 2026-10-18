@@ -30,6 +30,8 @@ export interface PersonalKey {
   owner: string;
   name: string;
   hint: string;
+  /** Full key material; absent on keys created before secrets became reusable. */
+  secret?: string;
   auto_balance: boolean;
   blocked_models: string[];
   disabled: boolean;

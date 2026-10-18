@@ -34,8 +34,10 @@ Use one server process per account data directory. This is not a Home worker fea
    an invitation. Complete this setup before sharing the site with friends.
 2. Administrators generate invitation codes with an expiry and a use count.
 3. A member registers, logs in, and creates one or more personal keys. Keys are
-   named independently (for example, phone and laptop). The full secret is shown
-   only when created; the store retains its hash and a display hint.
+   named independently (for example, phone and laptop). The full secret is stored
+   with the key, so its owner can copy it from the key list at any time; keys
+   created before this behavior have no recoverable secret and keep only a display
+   hint.
 4. Create a channel, such as `573`, then upload a CLIProxyAPI
    credential JSON into it, or use the channel's OAuth login action. Existing
    OAuth providers and refresh behavior are reused. JSON must include the provider

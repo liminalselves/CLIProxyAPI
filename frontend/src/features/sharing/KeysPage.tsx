@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/Table';
 import { sharingApi } from '@/services/api/sharing';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { IconCopy } from '@/components/ui/icons';
 import { LoadState, PageHeader } from './shared';
 import { useSharingActions, useSharingData, date } from './hooks';
 import { KeyModelFilterEditor } from './KeyModelFilterEditor';
@@ -50,6 +51,20 @@ export function KeysPage() {
     key.blocked_models.length
       ? t('sharing.blocked_models_count', { count: key.blocked_models.length })
       : t('sharing.blocked_models_all');
+  const keyHint = (key: PersonalKey) =>
+    key.secret ? (
+      <button
+        type="button"
+        className={styles.titleCopy}
+        title={t('sharing.copy_key')}
+        onClick={() => void copy(key.secret ?? '')}
+      >
+        <span className={styles.titleCopyText}>{key.hint}</span>
+        <IconCopy size={13} />
+      </button>
+    ) : (
+      key.hint
+    );
   const save = async () => {
     setSaving(true);
     await run(async () => {
@@ -89,7 +104,7 @@ export function KeysPage() {
                 />
               </div>
               {key.name && (
-                <span className={`${styles.cellSecondary} ${styles.mono}`}>{key.hint}</span>
+                <span className={`${styles.cellSecondary} ${styles.mono}`}>{keyHint(key)}</span>
               )}
               <span className={styles.cellSecondary}>
                 {t('sharing.created')}：{date(key.created_at)}
@@ -155,7 +170,7 @@ export function KeysPage() {
             {data?.keys.map((key) => (
               <TableRow key={key.id}>
                 <TableCell>{key.name}</TableCell>
-                <TableCell className={styles.mono}>{key.hint}</TableCell>
+                <TableCell className={styles.mono}>{keyHint(key)}</TableCell>
                 <TableCell>
                   <ToggleSwitch
                     checked={!key.disabled}
@@ -239,7 +254,7 @@ export function KeysPage() {
       <Modal
         open={Boolean(secret)}
         onClose={() => setSecret('')}
-        title={t('sharing.save_key')}
+        title={t('sharing.key_created')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setSecret('')}>
@@ -249,7 +264,7 @@ export function KeysPage() {
           </>
         }
       >
-        <p className="hint">{t('sharing.secret_once')}</p>
+        <p className="hint">{t('sharing.secret_created')}</p>
         <div className={styles.secret}>{secret}</div>
       </Modal>
     </div>
