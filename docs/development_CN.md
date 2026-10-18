@@ -40,10 +40,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1 -Action stop
 
 源码没变时可加 `-NoBuild` 复用开发二进制。源码修改后必须去掉此参数重新构建。修改 `multi-user` 配置后需停止并重新启动；不要用两个实例同时打开同一个账户数据目录。
 
-启动脚本使用 `--local-model`，从内嵌目录加载模型元数据，不依赖远程模型目录下载。这不会模拟模型回答，也不会让上游 API 离线可用。需要正常远程模型目录刷新时可不经脚本直接运行：
+启动脚本与生产行为一致，远程模型目录正常刷新。需要离线开发、改用内嵌目录时可不经脚本直接运行：
 
 ```powershell
-go run ./cmd/server --config ./config.yaml
+go run ./cmd/server --config ./config.yaml --local-model
 ```
 
 ## 访问与验证

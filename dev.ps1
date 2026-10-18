@@ -90,7 +90,7 @@ try {
         throw "The development binary is missing. Run without -NoBuild first."
     }
 
-    $serverArgs = @("--config", ('"{0}"' -f $configPath), "--local-model")
+    $serverArgs = @("--config", ('"{0}"' -f $configPath))
     if ($Background) {
         $serverProcess = Start-Process -FilePath $binaryPath -ArgumentList $serverArgs -WorkingDirectory $root -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru
         $state = @{
@@ -105,7 +105,7 @@ try {
         Write-Host "Stop with: .\dev.ps1 -Action stop"
     } else {
         Write-Host "Starting the development server. Press Ctrl+C to stop."
-        & $binaryPath --config $configPath --local-model
+        & $binaryPath --config $configPath
         if ($LASTEXITCODE -ne 0) {
             throw "The development server exited with code $LASTEXITCODE."
         }

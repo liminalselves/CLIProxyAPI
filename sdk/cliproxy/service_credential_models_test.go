@@ -101,7 +101,7 @@ func TestCredentialModelCatalogSourcesAndPlans(t *testing.T) {
 		provider, plan string
 		want           []*registry.ModelInfo
 	}{
-		{"codex", "free", registry.GetCodexFreeModels()}, {"codex", "plus", registry.GetCodexPlusModels()}, {"codex", "team", registry.GetCodexTeamModels()}, {"zcode", "", registry.GetZCodeModels()},
+		{"codex", "free", registry.GetCodexFreeModels()}, {"codex", "plus", registry.GetCodexPlusModels()}, {"codex", "team", registry.GetCodexTeamModels()},
 	} {
 		a := &coreauth.Auth{Provider: tc.provider, Attributes: map[string]string{"plan_type": tc.plan}}
 		catalog, err := service.credentialModelCatalog(context.Background(), a, false)
@@ -112,13 +112,20 @@ func TestCredentialModelCatalogSourcesAndPlans(t *testing.T) {
 			t.Fatal("static catalogs advertised account discovery")
 		}
 	}
-	_, err := service.credentialModelCatalog(context.Background(), &coreauth.Auth{Provider: "zcode"}, true)
-	if !errors.Is(err, coreauth.ErrCredentialModelsUnsupported) {
-		t.Fatalf("built-in refresh: %v", err)
+	zcodeCatalog, err := service.credentialModelCatalog(context.Background(), &coreauth.Auth{Provider: "zcode"}, false)
+	if err != nil || len(zcodeCatalog.Models) != len(registry.GetZCodeModels()) {
+		t.Fatalf("zcode catalog: %#v %v", zcodeCatalog, err)
 	}
-	_, err = service.credentialModelCatalog(context.Background(), &coreauth.Auth{Provider: "openai-compatible"}, false)
-	if !errors.Is(err, coreauth.ErrCredentialModelsUnsupported) {
-		t.Fatalf("provider catalog: %v", err)
+	if !zcodeCatalog.Source.UpstreamDiscovery || !zcodeCatalog.Source.SupportsRefresh {
+		t.Fatal("zcode catalog should advertise upstream discovery")
+	}
+	_, err = service.credentialModelCatalog(context.Background(), &coreauth.Auth{Provider: "zcode"}, true)
+	if !errors.Is(err, coreauth.ErrCredentialModelsRefreshFailed) {
+		t.Fatalf("zcode refresh without token: %v", err)
+	}
+	compatCatalog, err := service.credentialModelCatalog(context.Background(), &coreauth.Auth{Provider: "openai-compatible"}, false)
+	if err != nil || compatCatalog.Models != nil {
+		t.Fatalf("uncached compat catalog: %#v %v", compatCatalog, err)
 	}
 }
 

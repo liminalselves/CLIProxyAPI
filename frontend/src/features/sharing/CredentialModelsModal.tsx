@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { IconRefreshCw } from '@/components/ui/icons';
+import { IconDownload } from '@/components/ui/icons';
+import { ModelDiscoveryPanel } from '@/features/providers/sheets/forms/ModelDiscoveryPanel';
 import { ModelEntriesEditor } from '@/features/providers/sheets/forms/ModelEntriesEditor';
+import formStyles from '@/features/providers/sheets/forms/sharedForm.module.scss';
 import type { ProviderModelCapabilities } from '@/features/providers/descriptors';
 import type { ModelEntryInput } from '@/features/providers/types';
+import type { ModelInfo } from '@/utils/models';
 import {
   credentialModelManagement,
   isCredentialModelsUnsupported,
@@ -14,7 +17,6 @@ import {
 } from '@/services/api/credentialModelManagement';
 import { authFilesApi } from '@/services/api/authFiles';
 import type { SharedCredential } from '@/services/api/sharingCredentials';
-import { useNotificationStore } from '@/stores';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
   credentialModelsToRows,
@@ -37,8 +39,7 @@ export function CredentialModelsModal({
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const { run, confirm } = useSharingActions(refresh);
-  const { showNotification } = useNotificationStore();
+  const { run } = useSharingActions(refresh);
   const account = useAuthStore((state) => state.account);
   const target = useMemo<CredentialModelTarget>(() => {
     const rawIndex = file.authIndex ?? file['auth_index'];
@@ -51,13 +52,15 @@ export function CredentialModelsModal({
   }, [file]);
   const [payload, setPayload] = useState<CredentialModelManagement | null>(null);
   const [rows, setRows] = useState<ModelEntryInput[]>([]);
-  const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'unsupported' | 'failed'>('loading');
   const [readonlyModels, setReadonlyModels] = useState<string[] | null>(null);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [discovering, setDiscovering] = useState(false);
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [hasDiscovered, setHasDiscovered] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
   const nameListId = 'credential-model-names';
 
   // The hub route enforces ownership itself; read-only stays for unmanaged files.
@@ -71,7 +74,6 @@ export function CredentialModelsModal({
       if (cancelled()) return;
       setPayload(next);
       setRows(credentialModelsToRows(next.models));
-      setDirty(false);
       setStatus('ready');
     } catch (err) {
       if (cancelled()) return;
@@ -123,7 +125,6 @@ export function CredentialModelsModal({
     : undefined;
 
   const updateRows = (next: (current: ModelEntryInput[]) => ModelEntryInput[]) => {
-    setDirty(true);
     setRows((current) => next(current));
   };
 
@@ -153,35 +154,51 @@ export function CredentialModelsModal({
     }
   };
 
-  const reset = () => {
-    if (!payload?.capabilities.reset || saving) return;
-    confirm(t('sharing.credential_models_reset_confirm'), async () => {
-      setPayload(await credentialModelManagement.reset(target));
-      onClose();
-    });
-  };
+  const canDiscover = Boolean(payload?.source.supports_refresh);
 
+  const discoveryModels = useMemo<ModelInfo[]>(
+    () => (payload?.available_models ?? []).map((model) => ({ name: model.id })),
+    [payload]
+  );
+
+  const existingRowNames = useMemo(
+    () => new Set(rows.map((row) => row.name.trim()).filter(Boolean)),
+    [rows]
+  );
+
+  // Discovery refreshes the server-side source catalog and returns fresh
+  // available models; it never touches the rows being edited.
   const discover = async () => {
-    if (!payload?.source.supports_refresh || discovering) return;
+    if (!canDiscover || discovering) return;
     setDiscovering(true);
+    setDiscoverError(null);
     try {
       const next = await credentialModelManagement.discover(target);
       setPayload(next);
-      // Keep unsaved edits; a refreshed catalog only replaces untouched rows.
-      if (!dirty) setRows(credentialModelsToRows(next.models));
-      showNotification(t('sharing.credential_models_refreshed'), 'success');
+      setHasDiscovered(true);
     } catch (err) {
-      showNotification(err instanceof Error ? err.message : String(err), 'error');
+      setDiscoverError(err instanceof Error ? err.message : String(err));
+      setHasDiscovered(true);
     } finally {
       setDiscovering(false);
     }
+  };
+
+  const applyPicked = (picked: ModelInfo[]) => {
+    if (!picked.length) return;
+    updateRows((current) => {
+      const existing = new Set(current.map((row) => row.name.trim()).filter(Boolean));
+      const additions = picked
+        .filter((model) => !existing.has(model.name))
+        .map((model) => ({ name: model.name, alias: '' }));
+      return additions.length ? [...current, ...additions] : current;
+    });
   };
 
   const fallbackModels =
     readonlyModels ?? (Array.isArray(file.models) ? file.models : []);
   const enabledFilter = payload ? stringList(payload.enabled_models) : [];
   const excludedFilter = payload ? stringList(payload.excluded_models) : [];
-  const hours = payload ? Math.round(payload.source.refresh_interval_seconds / 3600) : 0;
 
   return (
     <Modal
@@ -192,23 +209,14 @@ export function CredentialModelsModal({
       width={640}
       footer={
         editable && status === 'ready' ? (
-          <div className={styles.modelsFooter}>
-            <div className={styles.modelsFooterSide}>
-              {payload?.configured && payload.capabilities.reset ? (
-                <Button variant="secondary" onClick={reset} disabled={saving || discovering}>
-                  {t('sharing.credential_models_reset')}
-                </Button>
-              ) : null}
-            </div>
-            <div className={styles.modelsFooterSide}>
-              <Button variant="secondary" onClick={onClose} disabled={saving}>
-                {t('common.cancel')}
-              </Button>
-              <Button onClick={() => void save()} loading={saving} disabled={discovering}>
-                {t('common.save')}
-              </Button>
-            </div>
-          </div>
+          <>
+            <Button variant="secondary" onClick={onClose} disabled={saving}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void save()} loading={saving} disabled={discovering}>
+              {t('common.save')}
+            </Button>
+          </>
         ) : (
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             {t('common.close')}
@@ -247,39 +255,8 @@ export function CredentialModelsModal({
           </Button>
         </>
       ) : payload ? (
-        <>
-          <div className={styles.modelsSource}>
-            <span className={styles.badge}>
-              {t(`sharing.credential_models_source_${payload.source.kind}`)}
-            </span>
-            {payload.source.auto_refresh && hours > 0 && (
-              <span className={styles.modelsSourceMeta}>
-                {t('sharing.credential_models_auto_refresh', { hours })}
-              </span>
-            )}
-            <span className={styles.modelsSourceMeta}>
-              {t(
-                payload.configured
-                  ? 'sharing.credential_models_configured'
-                  : 'sharing.credential_models_inherited'
-              )}
-            </span>
-            {payload.source.supports_refresh && (
-              <button
-                type="button"
-                className={styles.modelsRefreshBtn}
-                onClick={() => void discover()}
-                disabled={discovering || saving}
-                title={t('sharing.credential_models_refresh')}
-                aria-label={t('sharing.credential_models_refresh')}
-              >
-                <IconRefreshCw size={13} className={discovering ? styles.spinning : undefined} />
-              </button>
-            )}
-          </div>
-          {!payload.catalog_available && (
-            <p className={styles.modelsWarning}>{t('sharing.credential_models_catalog_missing')}</p>
-          )}
+        <div className={formStyles.form}>
+          <p className="hint">{t('sharing.credential_models_hint')}</p>
           {!payload.capabilities.manual_models && (
             <p className="hint">{t('sharing.credential_models_account_only')}</p>
           )}
@@ -293,13 +270,40 @@ export function CredentialModelsModal({
               {t('sharing.credential_models_excluded_filter', { list: excludedFilter.join('、') })}
             </p>
           )}
-          <p className="hint">{t('sharing.credential_models_hint')}</p>
           <datalist id={nameListId}>
             {payload.available_models.map((model) => (
               <option key={model.id} value={model.id} />
             ))}
           </datalist>
-          <ModelEntriesEditor
+          <div className={formStyles.entriesList}>
+            {canDiscover ? (
+              <div className={formStyles.entriesToolbar}>
+              <button
+                type="button"
+                className={formStyles.connectivityBtn}
+                onClick={() => setDiscoveryOpen((open) => !open)}
+                disabled={saving || discovering}
+                aria-expanded={discoveryOpen}
+              >
+                  <IconDownload size={14} />
+                  <span>{t('sharing.credential_models_fetch')}</span>
+                </button>
+              </div>
+            ) : null}
+            {canDiscover && discoveryOpen ? (
+              <ModelDiscoveryPanel
+                loading={discovering}
+                error={discoverError}
+                models={discoveryModels}
+                hasFetched={hasDiscovered || payload.catalog_available}
+                existingNames={existingRowNames}
+                mutating={saving}
+                onApply={applyPicked}
+                onReload={() => void discover()}
+                onClose={() => setDiscoveryOpen(false)}
+              />
+            ) : null}
+            <ModelEntriesEditor
             aliasRequired={false}
             models={rows}
             capabilities={editorCapabilities}
@@ -316,13 +320,14 @@ export function CredentialModelsModal({
             }
             onAdd={() => updateRows((current) => [...current, { name: '', alias: '' }])}
             onRemove={(index) => updateRows((current) => current.filter((_, i) => i !== index))}
-          />
+            />
+          </div>
           {error && (
             <div className="error-box" role="alert">
               {error}
             </div>
           )}
-        </>
+        </div>
       ) : null}
     </Modal>
   );

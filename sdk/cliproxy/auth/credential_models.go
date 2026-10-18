@@ -115,10 +115,19 @@ func DecodeCredentialModels(data []byte) ([]CredentialModel, error) {
 }
 
 func SupportsCredentialModels(a *Auth) bool {
-	if a == nil || IsConfigAPIKeyAuth(a) || IsPluginVirtualAuth(a) || a.AuthKind() == "apikey" {
+	if a == nil || IsConfigAPIKeyAuth(a) || IsPluginVirtualAuth(a) {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(a.Provider)) {
+	provider := strings.ToLower(strings.TrimSpace(a.Provider))
+	// OpenAI-compatible credentials are API-key only; the key is the credential
+	// material, not a config-backed gate key.
+	if provider == "openai-compatible" {
+		return true
+	}
+	if a.AuthKind() == "apikey" {
+		return false
+	}
+	switch provider {
 	case "claude", "codex", "gemini", "gemini-interactions", "vertex", "aistudio", "kimi", "kimi-ai", "kimi.ai", "kimi.com", "xai", "devin", "meta", "zcode", "antigravity":
 		return true
 	default:

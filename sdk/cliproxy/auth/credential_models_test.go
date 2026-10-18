@@ -41,9 +41,13 @@ func TestCredentialModelScopeAndNormalization(t *testing.T) {
 	if model.Name != "org/model" || model.Alias != "friendly" || len(model.Thinking.Levels) != 2 || !model.Thinking.ZeroAllowed || len(*model.InputModalities) != 2 {
 		t.Fatalf("normalization: %#v", model)
 	}
-	for _, a := range []*Auth{nil, {Provider: "openai-compatible", Metadata: map[string]any{"models": models}}, {Provider: "codex", Attributes: map[string]string{AttributeAPIKey: "key"}, Metadata: map[string]any{"models": models}}} {
+	for _, a := range []*Auth{nil, {Provider: "codex", Attributes: map[string]string{AttributeAPIKey: "key"}, Metadata: map[string]any{"models": models}}} {
 		if _, configured := a.CredentialModels(); configured {
 			t.Fatalf("non-OAuth model list intercepted: %#v", a)
 		}
+	}
+	compat := &Auth{Provider: "openai-compatible", Metadata: map[string]any{"models": models}}
+	if entries, configured := compat.CredentialModels(); !configured || len(entries) != 1 || entries[0].Name != "org/model" {
+		t.Fatalf("openai-compatible model list not honored: %#v", entries)
 	}
 }

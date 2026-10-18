@@ -8,6 +8,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/modelconfig"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	log "github.com/sirupsen/logrus"
 )
 
 func buildCredentialModels(a *coreauth.Auth, catalog []*ModelInfo, excluded []string, restrictToCatalog bool) ([]*ModelInfo, bool) {
@@ -90,6 +91,10 @@ func (s *Service) credentialModelCatalog(ctx context.Context, a *coreauth.Auth, 
 	if s.antigravityHomeEnabled() {
 		return nil, coreauth.ErrCredentialModelsUnsupported
 	}
+	provider := strings.ToLower(strings.TrimSpace(a.Provider))
+	if provider == "zcode" || provider == "openai-compatible" {
+		return s.upstreamCredentialModelCatalog(ctx, a, provider, refresh)
+	}
 	status := registry.ModelCatalogStatusForProvider(a.Provider)
 	models := credentialDefaultModels(a)
 	if strings.EqualFold(a.Provider, "antigravity") {
@@ -130,4 +135,34 @@ func (s *Service) credentialModelCatalog(ctx context.Context, a *coreauth.Auth, 
 		models = credentialDefaultModels(a)
 	}
 	return &coreauth.CredentialModelCatalog{Models: models, Source: status}, nil
+}
+
+// upstreamCredentialModelCatalog serves providers whose catalog is the
+// credential's own account upstream (zcode, openai-compatible). Reads use the
+// cached listing; refresh re-fetches and replaces the cache.
+func (s *Service) upstreamCredentialModelCatalog(ctx context.Context, a *coreauth.Auth, provider string, refresh bool) (*coreauth.CredentialModelCatalog, error) {
+	status := registry.ModelCatalogStatus{
+		Kind:                   "account_upstream",
+		AutoRefresh:            true,
+		SupportsRefresh:        true,
+		UpstreamDiscovery:      true,
+		RefreshIntervalSeconds: int64(registry.ModelsRefreshInterval / time.Second),
+	}
+	if refresh {
+		baseURL, apiKey := upstreamModelsEndpoint(a, provider)
+		models, errFetch := fetchUpstreamModels(ctx, baseURL, apiKey, a.ProxyURL)
+		if errFetch != nil {
+			log.WithError(errFetch).Debug("credential upstream model fetch failed")
+			return nil, coreauth.ErrCredentialModelsRefreshFailed
+		}
+		storeUpstreamModels(a, models)
+		return &coreauth.CredentialModelCatalog{Models: models, Source: status}, nil
+	}
+	if cached := cachedUpstreamModels(a); cached != nil {
+		return &coreauth.CredentialModelCatalog{Models: cached, Source: status}, nil
+	}
+	if provider == "zcode" {
+		return &coreauth.CredentialModelCatalog{Models: registry.GetZCodeModels(), Source: status}, nil
+	}
+	return &coreauth.CredentialModelCatalog{Source: status}, nil
 }

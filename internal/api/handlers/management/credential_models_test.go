@@ -155,7 +155,7 @@ func TestCredentialModelManagementPermissionsAndValidation(t *testing.T) {
 		t.Fatalf("management API: %d %s", w.Code, w.Body.String())
 	}
 	current, _ = h.authManager.GetByID(a.ID)
-	current.Provider = "openai-compatible"
+	current.Provider = "unknown-upstream"
 	if _, err := h.authManager.Update(context.Background(), current); err != nil {
 		t.Fatal(err)
 	}

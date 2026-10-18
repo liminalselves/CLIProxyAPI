@@ -116,10 +116,6 @@ export const credentialModelManagement = {
       { params: route.params }
     );
   },
-  reset: (target: CredentialModelTarget) => {
-    const route = endpoints(target);
-    return apiClient.delete<CredentialModelManagement>(route.models, { params: route.params });
-  },
   discover: (target: CredentialModelTarget) => {
     const route = endpoints(target);
     return apiClient.post<CredentialModelManagement>(
