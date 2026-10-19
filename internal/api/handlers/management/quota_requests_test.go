@@ -15,9 +15,44 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/misc"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/multiuser"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
+
+func TestPrepareCredentialQuotaRequestAntigravityUserAgent(t *testing.T) {
+	for _, tc := range []struct {
+		provider, target string
+		changed          bool
+	}{
+		{"antigravity", "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary", true},
+		{"antigravity", "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary", true},
+		{"antigravity", "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary", true},
+		{"antigravity", "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist", true},
+		{"antigravity", "https://example.com/v1internal:retrieveUserQuotaSummary", false},
+		{"antigravity", "https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent", false},
+		{"codex", "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary", false},
+	} {
+		t.Run(tc.provider+tc.target, func(t *testing.T) {
+			auth := &coreauth.Auth{Provider: tc.provider}
+			target, _ := url.Parse(tc.target)
+			headers := map[string]string{"user-agent": "antigravity/cli/1.0.13", "Authorization": "Bearer $TOKEN$"}
+			if err := prepareCredentialQuotaRequest(auth, target, headers); err != nil {
+				t.Fatal(err)
+			}
+			if tc.changed {
+				if headers["User-Agent"] != misc.AntigravityUserAgent() || headers["user-agent"] != "" {
+					t.Fatalf("quota user agent was not replaced with the current Hub version: %v", headers)
+				}
+			} else if headers["user-agent"] != "antigravity/cli/1.0.13" || headers["User-Agent"] != "" {
+				t.Fatal("unrelated request user agent changed")
+			}
+			if headers["Authorization"] != "Bearer $TOKEN$" {
+				t.Fatal("user agent normalization changed the token placeholder")
+			}
+		})
+	}
+}
 
 func TestPrepareCredentialQuotaRequestKimiDomain(t *testing.T) {
 	for _, tc := range []struct {
@@ -75,9 +110,9 @@ func TestPrepareCredentialQuotaRequestMetaDCA(t *testing.T) {
 }
 
 func TestQuotaAPICallsWithoutCredentialExport(t *testing.T) {
-	var receivedHost, receivedAuthorization string
+	var receivedHost, receivedAuthorization, receivedUserAgent string
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedHost, receivedAuthorization = r.Host, r.Header.Get("Authorization")
+		receivedHost, receivedAuthorization, receivedUserAgent = r.Host, r.Header.Get("Authorization"), r.Header.Get("User-Agent")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"limits":[],"subs_usage":{}}`)
 	}))
@@ -101,6 +136,7 @@ func TestQuotaAPICallsWithoutCredentialExport(t *testing.T) {
 		{"kimi", "kimi.com", "https://api.kimi.ai/coding/v1/usages", "$TOKEN$", "api.kimi.com", "GET"},
 		{"kimi", "kimi.ai", "https://api.kimi.com/coding/v1/usages", "$TOKEN$", "api.kimi.ai", "GET"},
 		{"meta", "", "https://api.meta.ai/muse-code/key", "$DCA_TOKEN$", "api.meta.ai", "POST"},
+		{"antigravity", "", "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary", "$TOKEN$", "daily-cloudcode-pa.googleapis.com", "POST"},
 	} {
 		t.Run(tc.provider+tc.domain, func(t *testing.T) {
 			manager := coreauth.NewManager(nil, nil, nil)
@@ -108,6 +144,7 @@ func TestQuotaAPICallsWithoutCredentialExport(t *testing.T) {
 				ID: "quota.json", Provider: tc.provider, Metadata: map[string]any{
 					"owner": "alice", "channel_id": "channel", "domain": tc.domain,
 					"access_token": "kimi-token", "dca_token": "dca:meta-quota", "api_key": "LLM|not-for-quota",
+					"expired": time.Now().Add(time.Hour).Format(time.RFC3339),
 				},
 			})
 			if errRegister != nil {
@@ -124,7 +161,7 @@ func TestQuotaAPICallsWithoutCredentialExport(t *testing.T) {
 			router.GET("/credentials/:id/download", h.HubDownloadCredential)
 			body, _ := json.Marshal(map[string]any{
 				"authIndex": auth.EnsureIndex(), "method": tc.method, "url": tc.target,
-				"header": map[string]string{"Authorization": "Bearer " + tc.token}, "data": "{}",
+				"header": map[string]string{"Authorization": "Bearer " + tc.token, "User-Agent": "antigravity/cli/1.0.13"}, "data": "{}",
 			})
 			for _, endpoint := range []string{"/management", "/credentials/" + route + "/api-call"} {
 				for _, username := range []string{"alice", "bob"} {
@@ -142,6 +179,9 @@ func TestQuotaAPICallsWithoutCredentialExport(t *testing.T) {
 					}
 					if receivedAuthorization != expected {
 						t.Fatal("quota request did not use its provider-specific token")
+					}
+					if tc.provider == "antigravity" && receivedUserAgent != misc.AntigravityUserAgent() {
+						t.Fatalf("%s forwarded a stale Antigravity user agent: %q", endpoint, receivedUserAgent)
 					}
 				}
 			}

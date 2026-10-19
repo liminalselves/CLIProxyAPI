@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	kimiauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/kimi"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/misc"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
 
@@ -28,6 +29,16 @@ func prepareCredentialQuotaRequest(auth *coreauth.Auth, target *url.URL, headers
 	}
 	host := strings.ToLower(target.Hostname())
 	switch quotaProviderKey(auth.Provider) {
+	case "antigravity":
+		if headers != nil && hubQuotaRouteAllowed("antigravity", host, target.Path) {
+			// Google gates quota groups by client version, not just model execution.
+			for key := range headers {
+				if strings.EqualFold(key, "User-Agent") {
+					delete(headers, key)
+				}
+			}
+			headers["User-Agent"] = misc.AntigravityUserAgent()
+		}
 	case "kimi":
 		if (host == "api.kimi.com" || host == "api.kimi.ai") && target.Path == "/coding/v1/usages" {
 			regionalAuth := *auth

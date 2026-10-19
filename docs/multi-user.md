@@ -341,7 +341,9 @@ DCA token for `$DCA_TOKEN$` only at `/muse-code/key`; ordinary `$TOKEN$` calls r
 their provider token behavior. Credential summaries include Antigravity project IDs
 and parsed Codex account/subscription claims, not raw JWTs or credential secrets.
 These rules also apply to management-mode quota queries; export permissions remain
-unchanged.
+unchanged. Antigravity quota and subscription queries use the server's automatically
+updated Hub User-Agent; older client versions can omit Gemini or Gemini 4 Argon
+quota groups. Each upstream group retains its own windows and remaining balance.
 
 Credential `route_id` values are URL-safe base64 encodings of runtime credential
 IDs, returned by `/credentials`; opaque IDs prevent path separators from becoming
