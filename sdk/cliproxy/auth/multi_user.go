@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"strings"
+
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 )
 
 func (a *Auth) Owner() string     { return a.metadataString("owner") }
@@ -150,6 +152,12 @@ func ModelBlocked(ctx context.Context, model string) bool {
 // excluded for the request key, including credential and channel scopes.
 func AuthModelBlocked(ctx context.Context, auth *Auth, model string) bool {
 	return blockedModelsFromContext(ctx).blocksAuth(auth, model)
+}
+
+// Bare-model balancing exhausts eligible channels without overriding explicit routing.
+func bareModelFailoverAllowed(ctx context.Context, model string, opts cliproxyexecutor.Options) bool {
+	model = strings.TrimSpace(model)
+	return BareModelsAllowed(ctx) && model != "" && !strings.Contains(model, "/") && pinnedAuthIDFromMetadata(opts.Metadata) == ""
 }
 
 type bareModelsContextKey struct{}

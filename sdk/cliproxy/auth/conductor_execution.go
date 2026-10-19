@@ -488,6 +488,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
+	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {
@@ -499,7 +500,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	var lastErr error
 	var upstreamErr error
 	for {
-		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
+		if !failover && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, preferredExecutionAttemptError(lastErr, upstreamErr)
 			}
@@ -645,7 +646,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					m.MarkResult(execCtx, result)
 				}
 				if okAction {
-					if isRequestScopedStop(action, okAction) {
+					if !failover && isRequestScopedStop(action, okAction) {
 						return cliproxyexecutor.Response{}, wrapRequestStopError(errExec)
 					}
 					authErr = errExec
@@ -654,7 +655,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					}
 					continue
 				}
-				if isResponsesCompactRequestFaultError(execOpts, errExec) || isRequestInvalidError(errExec) {
+				if !failover && (isResponsesCompactRequestFaultError(execOpts, errExec) || isRequestInvalidError(errExec)) {
 					return cliproxyexecutor.Response{}, errExec
 				}
 				authErr = errExec
@@ -671,7 +672,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		if authErr != nil {
 			action, okAction := matchRequestScopedErrorAction(auth, authErr, m.runtimeConfigSnapshot())
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !failover && isRequestScopedStop(action, okAction) {
 					return cliproxyexecutor.Response{}, wrapRequestStopError(authErr)
 				}
 				lastErr = authErr
@@ -680,7 +681,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				}
 				continue
 			}
-			if isResponsesCompactRequestFaultError(opts, authErr) || isRequestInvalidError(authErr) {
+			if !failover && (isResponsesCompactRequestFaultError(opts, authErr) || isRequestInvalidError(authErr)) {
 				return cliproxyexecutor.Response{}, authErr
 			}
 			lastErr = authErr
@@ -700,6 +701,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
+	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {
@@ -711,7 +713,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	var lastErr error
 	var upstreamErr error
 	for {
-		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
+		if !failover && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, preferredExecutionAttemptError(lastErr, upstreamErr)
 			}
@@ -861,7 +863,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					m.MarkResult(execCtx, result)
 				}
 				if okAction {
-					if isRequestScopedStop(action, okAction) {
+					if !failover && isRequestScopedStop(action, okAction) {
 						return cliproxyexecutor.Response{}, wrapRequestStopError(errExec)
 					}
 					authErr = errExec
@@ -870,7 +872,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					}
 					continue
 				}
-				if isRequestInvalidError(errExec) {
+				if !failover && isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
 				authErr = errExec
@@ -887,7 +889,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		if authErr != nil {
 			action, okAction := matchRequestScopedErrorAction(auth, authErr, m.runtimeConfigSnapshot())
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !failover && isRequestScopedStop(action, okAction) {
 					return cliproxyexecutor.Response{}, wrapRequestStopError(authErr)
 				}
 				lastErr = authErr
@@ -896,7 +898,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				}
 				continue
 			}
-			if isRequestInvalidError(authErr) {
+			if !failover && isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
 			lastErr = authErr
@@ -917,6 +919,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
+	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {
@@ -934,7 +937,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	var roundTiming homeRetryRoundTiming
 	for {
 		allowSameAuthRetry := homeMode && homeSameAuthRetryPending && lastHomeAuthID != "" && homeSameAuthRetries[lastHomeAuthID] == 0
-		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials && !allowSameAuthRetry {
+		if !failover && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials && !allowSameAuthRetry {
 			if lastErr != nil {
 				preferredErr := preferredExecutionAttemptError(lastErr, upstreamErr)
 				if homeMode {
@@ -1198,7 +1201,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			}
 			action, okAction := matchRequestScopedErrorAction(auth, errStream, m.runtimeConfigSnapshot())
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !failover && isRequestScopedStop(action, okAction) {
 					return nil, wrapRequestStopError(errStream)
 				}
 				lastErr = errStream
@@ -1210,7 +1213,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 				}
 				continue
 			}
-			if isRequestInvalidError(errStream) {
+			if !failover && isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
 			lastErr = errStream

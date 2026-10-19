@@ -88,11 +88,13 @@ func validateStreamResult(result *cliproxyexecutor.StreamResult, err error) (*cl
 	return result, nil
 }
 
-func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamChunk) ([]cliproxyexecutor.StreamChunk, bool, error) {
+func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamChunk, holdPrelude bool) ([]cliproxyexecutor.StreamChunk, bool, error) {
 	if ch == nil {
 		return nil, true, nil
 	}
 	buffered := make([]cliproxyexecutor.StreamChunk, 0, 1)
+	var prelude streamPrelude
+	bufferedBytes := 0
 	for {
 		var (
 			chunk cliproxyexecutor.StreamChunk
@@ -108,14 +110,32 @@ func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamC
 			chunk, ok = <-ch
 		}
 		if !ok {
+			if holdPrelude && len(prelude.pending) == 0 {
+				return nil, true, nil
+			}
 			return buffered, true, nil
 		}
 		if chunk.Err != nil {
+			// An incomplete frame cannot be proven free of output or tool activity.
+			if holdPrelude && len(prelude.pending) > 0 {
+				return append(buffered, chunk), false, nil
+			}
 			return nil, false, chunk.Err
 		}
+		if len(chunk.Payload) == 0 {
+			continue
+		}
 		buffered = append(buffered, chunk)
-		if len(chunk.Payload) > 0 {
+		if !holdPrelude || prelude.hasOutput(chunk.Payload) {
 			return buffered, false, nil
+		}
+		bufferedBytes += len(chunk.Payload)
+		if bufferedBytes >= 1<<20 || len(buffered) >= 1024 {
+			// Unknown partial frames may already contain output or tool activity.
+			if len(prelude.pending) > 0 {
+				return buffered, false, nil
+			}
+			return nil, false, &Error{Code: "stream_bootstrap_limit", Message: "upstream stream exceeded startup buffer without output", Retryable: true}
 		}
 	}
 }
@@ -210,6 +230,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 		return nil, &Error{Code: "executor_not_found", Message: "executor not registered"}
 	}
 	executor = executorForAuth(executor, auth)
+	failover := !ephemeralResult && bareModelFailoverAllowed(ctx, routeModel, opts)
 	ctx = contextWithRequestedModelAlias(ctx, opts, routeModel)
 	var lastErr error
 	var upstreamErr error
@@ -297,7 +318,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			applyRequestScopedActionToResult(action, okAction, &result)
 			m.recordExecutionResult(ctx, result, auth, ephemeralResult)
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !failover && isRequestScopedStop(action, okAction) {
 					return nil, wrapRequestStopError(errStream)
 				}
 				lastErr = errStream
@@ -306,7 +327,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				}
 				continue
 			}
-			if isRequestInvalidError(errStream) {
+			if !failover && isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
 			lastErr = errStream
@@ -316,7 +337,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			continue
 		}
 
-		buffered, closed, bootstrapErr := readStreamBootstrap(ctx, streamResult.Chunks)
+		buffered, closed, bootstrapErr := readStreamBootstrap(ctx, streamResult.Chunks, failover)
 		bootstrapErr = markUpstreamExecutionAttemptFromContext(ctx, bootstrapErr)
 		if hasUpstreamExecutionAttempt(bootstrapErr) {
 			upstreamErr = newStreamBootstrapError(bootstrapErr, streamResult.Headers)
@@ -349,7 +370,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 						streamResult = &cliproxyexecutor.StreamResult{}
 					} else {
 						streamResult = retryStream
-						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, streamResult.Chunks)
+						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, streamResult.Chunks, failover)
 						bootstrapErr = markUpstreamExecutionAttemptFromContext(ctx, bootstrapErr)
 						if bootstrapErr != nil {
 							warnLogUpstreamFailure(ctx, entry, provider, execModel, auth, time.Since(startRetry), bootstrapErr)
@@ -383,7 +404,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				applyRequestScopedActionToResult(action, okAction, &result)
 				m.recordExecutionResult(ctx, result, auth, ephemeralResult)
 				discardStreamChunks(streamResult.Chunks)
-				if isRequestScopedStop(action, okAction) {
+				if !failover && isRequestScopedStop(action, okAction) {
 					return nil, wrapRequestStopError(bootstrapErr)
 				}
 				lastErr = bootstrapErr
@@ -393,7 +414,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				}
 				continue
 			}
-			if isRequestInvalidError(bootstrapErr) {
+			if !failover && isRequestInvalidError(bootstrapErr) {
 				rerr := resultErrorFromError(bootstrapErr)
 				result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, RouteModel: routeModel, Success: false, Error: rerr, Options: execOpts}
 				result.RetryAfter = retryAfterFromError(bootstrapErr)

@@ -179,8 +179,17 @@ they cannot be edited.
 A key can opt into **even load balancing** (`auto_balance`, toggled per key in the
 console). Such keys may call a bare base model name directly, for example
 `kimi-k3` instead of `573-kimi#1/kimi-k3`. Each request is spread round-robin
-across every published credential serving that model across all channels, and a
-failed attempt fails over to the next credential until all have been tried.
+across eligible published credentials serving that model across all channels.
+The local dispatcher tries the remaining credentials after any upstream failure
+and returns the last upstream error only after exhausting the available routes.
+Request-fault classifications, request-scoped `stop` actions and
+`max-retry-credentials` do not truncate this traversal; credential health and
+cooldown bookkeeping still apply. `request-retry` controls additional rounds.
+For streams, empty startup events are buffered and discarded on failover, including
+`response.created`, role-only Chat chunks and empty Messages starts. Actual output,
+tool activity, terminal results or unrecognized events commit the stream, after
+which failures are forwarded without replay. Cancellation stops immediately, and
+prefixed model IDs or explicitly pinned credentials retain their existing routing.
 Chat, Messages, Gemini and Responses requests plus the image endpoints
 (`/v1/images/generations`, `/v1/images/edits`; see [Image API](image-api.md))
 follow this routing. Model-list endpoints include deduplicated bare model names
