@@ -180,6 +180,8 @@ A key can opt into **even load balancing** (`auto_balance`, toggled per key in t
 console). Such keys may call a bare base model name directly, for example
 `kimi-k3` instead of `573-kimi#1/kimi-k3`. Each request is spread round-robin
 across eligible published credentials serving that model across all channels.
+Each base model has its own round-robin position; interleaved requests for other
+models do not advance it, and thinking suffixes share their base model's rotation.
 The local dispatcher tries the remaining credentials after any upstream failure
 and returns the last upstream error only after exhausting the available routes.
 Request-fault classifications, request-scoped `stop` actions and

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 )
 
@@ -106,6 +107,62 @@ func newBareModelFailoverManager(t *testing.T, firstError error, prefix ...strin
 	}
 	manager.RegisterExecutor(executor)
 	return manager, executor
+}
+
+func TestBareModelRotationIsolatesModels(t *testing.T) {
+	for _, path := range []string{"execute", "count", "stream"} {
+		for _, provider := range []string{"kimi", "openai-compatible-test"} {
+			t.Run(path+"/"+provider, func(t *testing.T) {
+				manager, executor := newBareModelFailoverManager(t, nil)
+				if provider != "kimi" {
+					manager.RegisterExecutor(&bareModelCompatibleFailoverExecutor{executor})
+				}
+				reg := registry.GetGlobalRegistry()
+				reg.RegisterClient("hub-kimi-a", "kimi", []*registry.ModelInfo{
+					{ID: "ch1-kimi#1/kimi-k3"},
+					{ID: "ch1-kimi#1/rotation-peer"},
+				})
+				_, err := manager.Register(context.Background(), &Auth{
+					ID: "hub-kimi-c", Provider: provider, Prefix: "ch6-kimi#1", Status: StatusActive,
+					Metadata: map[string]any{"owner": "alice", "channel_id": "rotation-channel", "published": true},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				reg.RegisterClient("hub-kimi-c", provider, []*registry.ModelInfo{{ID: "ch6-kimi#1/rotation-peer"}})
+				t.Cleanup(func() { reg.UnregisterClient("hub-kimi-c") })
+
+				ctx := WithBareModelsAllowed(context.Background())
+				for i := range 6 {
+					model := "kimi-k3"
+					if i%2 == 1 {
+						model += "(high)"
+					}
+					for _, requested := range []string{model, "rotation-peer"} {
+						if err := runBareModelFailover(t, manager, ctx, path, requested, cliproxyexecutor.Options{}, "kimi", provider); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+
+				attempts := executor.attempts()
+				if len(attempts) != 12 {
+					t.Fatalf("attempts = %v, want 12 successful requests", attempts)
+				}
+				counts := [2]map[string]int{{}, {}}
+				for i, id := range attempts {
+					counts[i%2][id]++
+				}
+				want := [2]map[string]int{
+					{"hub-kimi-a": 3, "hub-kimi-b": 3},
+					{"hub-kimi-a": 3, "hub-kimi-c": 3},
+				}
+				if !reflect.DeepEqual(counts, want) {
+					t.Fatalf("per-model distribution = %v, want %v; attempts = %v", counts, want, attempts)
+				}
+			})
+		}
+	}
 }
 
 func TestBareModelFailoverRequestErrors(t *testing.T) {

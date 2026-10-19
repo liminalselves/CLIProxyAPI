@@ -48,18 +48,27 @@ type smoothWeightedState struct {
 	weights map[string]int64
 }
 
-type weightedSelectorStateModelKey struct{}
+type selectorStateModelKey struct{}
 
-func withWeightedSelectorStateModel(ctx context.Context, selector Selector, routeModel string) context.Context {
-	if _, ok := selector.(*WeightedRoundRobinSelector); !ok || strings.TrimSpace(routeModel) == "" {
+// Rotation uses the route model even when availability was prevalidated with an empty model.
+func withSelectorStateModel(ctx context.Context, selector Selector, routeModel string) context.Context {
+	switch selector.(type) {
+	case *RoundRobinSelector, *WeightedRoundRobinSelector:
+	default:
 		return ctx
 	}
-	return context.WithValue(ctx, weightedSelectorStateModelKey{}, routeModel)
+	if strings.TrimSpace(routeModel) == "" {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, selectorStateModelKey{}, routeModel)
 }
 
-func weightedSelectorStateModel(ctx context.Context, availabilityModel string) string {
+func selectorStateModel(ctx context.Context, availabilityModel string) string {
 	if ctx != nil {
-		if routeModel, ok := ctx.Value(weightedSelectorStateModelKey{}).(string); ok && strings.TrimSpace(routeModel) != "" {
+		if routeModel, ok := ctx.Value(selectorStateModelKey{}).(string); ok && strings.TrimSpace(routeModel) != "" {
 			return routeModel
 		}
 	}
@@ -619,7 +628,7 @@ func (s *RoundRobinSelector) Pick(ctx context.Context, provider, model string, o
 		return nil, err
 	}
 	available = preferCodexWebsocketAuths(ctx, provider, available)
-	key := provider + ":" + canonicalModelKey(model)
+	key := provider + ":" + canonicalModelKey(selectorStateModel(ctx, model))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.lastPicked == nil {
@@ -677,7 +686,7 @@ func (s *WeightedRoundRobinSelector) Pick(ctx context.Context, provider, model s
 		return nil, errAvailable
 	}
 	available = preferCodexWebsocketAuths(ctx, provider, available)
-	stateModel := weightedSelectorStateModel(ctx, model)
+	stateModel := selectorStateModel(ctx, model)
 	key := provider + ":" + canonicalModelKey(stateModel)
 
 	s.mu.Lock()
