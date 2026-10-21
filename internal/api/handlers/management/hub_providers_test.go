@@ -136,7 +136,8 @@ func TestHubCreateProviderPinsNamedPrefix(t *testing.T) {
 		`{"name":"ok","base_url":"not-a-url","api_key":"k","models":[{"name":"m"}]}`,
 		`{"name":"ok","base_url":"https://x.example.com","models":[{"name":"m"}]}`,
 		`{"name":"ok","base_url":"https://x.example.com","api_key":"k"}`,
-		`{"name":"ok","base_url":"https://x.example.com","api_key":"k","models":[{"name":"a/b"}]}`,
+		`{"name":"ok","base_url":"https://x.example.com","api_key":"k","models":[{"name":"a#b"}]}`,
+		`{"name":"ok","base_url":"https://x.example.com","api_key":"k","models":[{"name":"a/b","alias":"a#b"}]}`,
 	} {
 		if w, _ := providerRequest(t, h, admin, "POST", "/v8/hub/providers?channel_id="+ch.ID, body); w.Code != 400 {
 			t.Fatalf("invalid body accepted: %s -> %d", body, w.Code)

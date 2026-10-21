@@ -57,8 +57,8 @@ func buildHubProviderModels(inputs []hubProviderModelInput) ([]config.OpenAIComp
 		if name == "" {
 			return nil, fmt.Errorf("%w: model name is required", multiuser.ErrInvalid)
 		}
-		if strings.ContainsAny(name+alias, "/#") {
-			return nil, fmt.Errorf("%w: model names must not contain '/' or '#'", multiuser.ErrInvalid)
+		if strings.ContainsAny(name+alias, "#\r\n\t") {
+			return nil, fmt.Errorf("%w: model names must not contain '#' or control whitespace", multiuser.ErrInvalid)
 		}
 		key := alias
 		if key == "" {

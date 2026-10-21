@@ -176,7 +176,7 @@ func (h *BaseAPIHandler) providersForExecution(modelName, originalRequestedModel
 }
 
 func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowImageModel, allowBareModel bool) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
-	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel && !allowBareModel && !strings.Contains(thinking.ParseSuffix(modelName).ModelName, "/") {
+	if h != nil && h.Cfg != nil && h.Cfg.RequireChannelModel && !allowBareModel && h.AuthManager.ModelRoutingPrefix(modelName) == "" {
 		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadRequest, Error: errors.New(`{"error":{"message":"select a channel-prefixed model from the marketplace","type":"invalid_request_error","code":"channel_required","param":"model"}}`)}
 	}
 	resolvedModelName := modelName
@@ -225,7 +225,7 @@ func (h *BaseAPIHandler) getRequestDetailsWithOptions(modelName string, allowIma
 	// executor keys of every published credential serving the base model: the
 	// catalog lookup above only names the model's native provider, which would
 	// silently drop channels backed by other provider kinds (e.g. openai-compatible).
-	if allowBareModel && h != nil && h.AuthManager != nil && !strings.Contains(baseModel, "/") {
+	if allowBareModel && h != nil && h.AuthManager != nil && h.AuthManager.ModelRoutingPrefix(baseModel) == "" {
 		providers = mergeProviderList(providers, h.AuthManager.ProvidersForBaseModel(baseModel))
 	}
 

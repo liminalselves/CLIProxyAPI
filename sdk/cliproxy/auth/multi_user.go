@@ -94,10 +94,6 @@ func (blocked modelBlocklist) blocks(model string) bool {
 	if _, exists := blocked[model]; exists {
 		return true
 	}
-	if _, base, pinned := strings.Cut(model, "/"); pinned {
-		_, exists := blocked[base]
-		return exists
-	}
 	return false
 }
 
@@ -113,13 +109,9 @@ func (blocked modelBlocklist) blocksAuth(auth *Auth, model string) bool {
 		return true
 	}
 	prefix := strings.TrimSpace(auth.Prefix)
-	base := canonicalModelKey(model)
-	if route, rest, pinned := strings.Cut(base, "/"); pinned {
-		if route != prefix {
-			// Pinned to another credential; this auth stays eligible.
-			return false
-		}
-		base = rest
+	base := canonicalModelKey(rewriteModelForAuth(strings.TrimSpace(model), auth))
+	if blocked.blocks(base) {
+		return true
 	}
 	if prefix != "" {
 		if _, ok := blocked[prefix]; ok {
@@ -143,7 +135,8 @@ func (blocked modelBlocklist) blocksAuth(auth *Auth, model string) bool {
 	return false
 }
 
-// ModelBlocked matches either a pinned route or a base name excluded across all channels.
+// ModelBlocked matches the literal requested ID. AuthModelBlocked additionally
+// resolves base-model and scope exclusions using the serving credential's prefix.
 func ModelBlocked(ctx context.Context, model string) bool {
 	return blockedModelsFromContext(ctx).blocks(model)
 }
@@ -154,10 +147,34 @@ func AuthModelBlocked(ctx context.Context, auth *Auth, model string) bool {
 	return blockedModelsFromContext(ctx).blocksAuth(auth, model)
 }
 
+// ModelRoutingPrefix identifies an actual credential prefix, not an upstream
+// model namespace. Disabled credentials retain their explicit routing boundary.
+func (m *Manager) ModelRoutingPrefix(model string) string {
+	if m == nil {
+		return ""
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.modelRoutingPrefixLocked(model)
+}
+
+func (m *Manager) modelRoutingPrefixLocked(model string) string {
+	prefix, _, hasSlash := strings.Cut(canonicalModelKey(model), "/")
+	if !hasSlash || prefix == "" {
+		return ""
+	}
+	for _, auth := range m.auths {
+		if auth != nil && strings.TrimSpace(auth.Prefix) == prefix {
+			return prefix
+		}
+	}
+	return ""
+}
+
 // Bare-model balancing exhausts eligible channels without overriding explicit routing.
-func bareModelFailoverAllowed(ctx context.Context, model string, opts cliproxyexecutor.Options) bool {
+func (m *Manager) bareModelFailoverAllowed(ctx context.Context, model string, opts cliproxyexecutor.Options) bool {
 	model = strings.TrimSpace(model)
-	return BareModelsAllowed(ctx) && model != "" && !strings.Contains(model, "/") && pinnedAuthIDFromMetadata(opts.Metadata) == ""
+	return BareModelsAllowed(ctx) && model != "" && m.ModelRoutingPrefix(model) == "" && pinnedAuthIDFromMetadata(opts.Metadata) == ""
 }
 
 type bareModelsContextKey struct{}

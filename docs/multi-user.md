@@ -120,6 +120,14 @@ Model IDs contain no username; they are `channel-source/model`:
   `573-daye/kimi-k3`. The provider name is chosen at creation (slug format, no
   `#`) and is immutable afterwards.
 
+Upstream model names and public aliases may contain `/`, for example
+`573-provider/vanchin/deepseek-v4.1-flash`. Only a registered credential/provider
+prefix before the first `/` pins a request; the remaining model ID is preserved
+verbatim. With even load balancing enabled, `vanchin/deepseek-v4.1-flash` is a bare
+model name and participates in the same rotation, failover and key exclusions as
+other bare names. A registered prefix takes precedence over an upstream namespace
+with the same spelling, including when that credential is disabled.
+
 This is a breaking rename: model IDs from before this scheme (including any
 `username-slug` prefixed IDs) stop resolving after upgrade, so update client
 configurations. On startup the server migrates stored channels and credentials

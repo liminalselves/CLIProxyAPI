@@ -1,5 +1,10 @@
-/** Remove blank/duplicate entries and pinned routes covered by a bare model or scope block. */
-export function normalizeKeyBlockedModels(values: readonly string[]): string[] {
+import type { MarketplaceModel } from './types';
+
+/** Remove blank/duplicate entries and catalog routes covered by a model or scope block. */
+export function normalizeKeyBlockedModels(
+  values: readonly string[],
+  routes: readonly Pick<MarketplaceModel, 'id' | 'base_model' | 'channel'>[] = []
+): string[] {
   const cleaned: string[] = [];
   const seen = new Set<string>();
   for (const value of values) {
@@ -9,14 +14,10 @@ export function normalizeKeyBlockedModels(values: readonly string[]): string[] {
     cleaned.push(model);
   }
 
-  const bareScopes = new Set(cleaned.filter((model) => !model.includes('/')));
-  return cleaned.filter((model) => {
-    const separator = model.lastIndexOf('/');
-    if (separator < 0) return true;
-    const prefix = model.slice(0, separator);
-    const base = model.slice(separator + 1);
-    // A bare model block covers every pinned route of that model, and a
-    // credential/channel scope covers every route under that prefix.
-    return !bareScopes.has(base) && !bareScopes.has(prefix);
-  });
+  const covered = new Set(
+    routes
+      .filter((route) => seen.has(route.base_model) || seen.has(route.channel))
+      .map((route) => route.id)
+  );
+  return cleaned.filter((model) => !covered.has(model));
 }

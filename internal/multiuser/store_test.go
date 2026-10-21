@@ -595,6 +595,9 @@ func TestMatchUsageModelAndKeyQueries(t *testing.T) {
 		keyID string
 		want  bool
 	}{
+		{"namespaced model serving pin", UsageEvent{Model: "vanchin/deepseek-v4.1-flash", Channel: "ch1"}, "vanchin/deepseek-v4.1-flash（ch1/vanchin/deepseek-v4.1-flash）", "", true},
+		{"namespaced model other channel", UsageEvent{Model: "vanchin/deepseek-v4.1-flash", Channel: "ch2"}, "vanchin/deepseek-v4.1-flash（ch1/vanchin/deepseek-v4.1-flash）", "", false},
+		{"namespaced pinned model", UsageEvent{Model: "ch1/vanchin/deepseek-v4.1-flash", Channel: "ch1"}, "vanchin/deepseek-v4.1-flash（ch1/vanchin/deepseek-v4.1-flash）", "", true},
 		{"existing model substring", bare, "deepseek", "", true},
 		{"channel text does not add a list filter", bare, "ch1", "", false},
 		{"serving substring does not add a list filter", bare, "ch1/deepseek", "", false},

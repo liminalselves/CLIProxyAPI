@@ -230,7 +230,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 		return nil, &Error{Code: "executor_not_found", Message: "executor not registered"}
 	}
 	executor = executorForAuth(executor, auth)
-	failover := !ephemeralResult && bareModelFailoverAllowed(ctx, routeModel, opts)
+	failover := !ephemeralResult && m.bareModelFailoverAllowed(ctx, routeModel, opts)
 	ctx = contextWithRequestedModelAlias(ctx, opts, routeModel)
 	var lastErr error
 	var upstreamErr error

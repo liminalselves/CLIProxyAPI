@@ -1018,6 +1018,9 @@ func (m *Manager) authSupportsRouteModel(registryRef *registry.ModelRegistry, au
 		if auth == nil || routeKey == "" || !auth.ChannelPublished() {
 			return false
 		}
+		if prefix := m.modelRoutingPrefixLocked(routeKey); prefix != "" && prefix != auth.Prefix {
+			return false
+		}
 		if strings.HasPrefix(routeKey, auth.Prefix+"/") {
 			if !auth.ChannelModelEnabled(routeKey) {
 				return false

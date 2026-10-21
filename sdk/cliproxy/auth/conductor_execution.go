@@ -488,7 +488,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
-	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
+	failover := !homeMode && m.bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {
@@ -701,7 +701,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
-	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
+	failover := !homeMode && m.bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {
@@ -919,7 +919,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	executionModel, restoreExecutionModel := executionModelForAuthSelection(opts, req.Model)
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
-	failover := !homeMode && bareModelFailoverAllowed(ctx, routeModel, opts)
+	failover := !homeMode && m.bareModelFailoverAllowed(ctx, routeModel, opts)
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	if !homeMode {

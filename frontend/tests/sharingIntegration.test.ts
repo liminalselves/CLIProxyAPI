@@ -281,6 +281,23 @@ describe('official frontend account integration', () => {
     expect(pinned).toContain('bob-kimi/kimi-k3');
     expect(pinned).not.toContain('（');
 
+    const namespaced = wrap(
+      createElement(UsageLogRow, {
+        entry: { ...entry, model: 'vanchin/deepseek-v4.1-flash' },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    expect(namespaced).toContain('（bob-kimi/vanchin/deepseek-v4.1-flash）');
+    const namespacedPinned = wrap(
+      createElement(UsageLogRow, {
+        entry: { ...entry, model: 'bob-kimi/vanchin/deepseek-v4.1-flash' },
+        showConsumer: false,
+        onOpen: () => {},
+      })
+    );
+    expect(namespacedPinned).not.toContain('（');
+
     const scoped = wrap(
       createElement(UsageLogRow, { entry, showConsumer: true, onOpen: () => {} })
     );

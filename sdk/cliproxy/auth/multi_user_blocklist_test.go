@@ -55,8 +55,8 @@ func TestBlocklistBareModelBlocksEveryRoute(t *testing.T) {
 			t.Fatalf("bare model must not block other models on auth %d", i)
 		}
 	}
-	if !ModelBlocked(blocked, "gpt-6") || !ModelBlocked(blocked, "456-kimi#1/gpt-6") {
-		t.Fatal("ModelBlocked must match a bare name on its own and inside a route")
+	if !ModelBlocked(blocked, "gpt-6") || !AuthModelBlocked(blocked, other, "456-kimi#1/gpt-6") {
+		t.Fatal("bare exclusions must match literal names and credential-resolved routes")
 	}
 }
 

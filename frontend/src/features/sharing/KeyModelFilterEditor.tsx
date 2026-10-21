@@ -6,6 +6,7 @@ import { sharingApi } from '@/services/api/sharing';
 import { LoadState } from './shared';
 import { useSharingData } from './hooks';
 import { groupMarketplaceModels } from './marketplace';
+import { normalizeKeyBlockedModels } from './keyFilters';
 import styles from './Sharing.module.scss';
 
 interface KeyModelFilterEditorProps {
@@ -80,7 +81,7 @@ export function KeyModelFilterEditor({ value, onChange }: KeyModelFilterEditorPr
     const next = new Set(selected);
     if (blocked) next.add(entry);
     else next.delete(entry);
-    onChange([...next]);
+    onChange(normalizeKeyBlockedModels([...next], models));
   };
 
   const scopeBlocked = (channelID: string, prefix: string) =>

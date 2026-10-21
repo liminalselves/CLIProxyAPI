@@ -268,8 +268,8 @@ function RequestStatusPill({ kind }: { kind: 'fail' | 'interrupted' }) {
 
 // Bare base-model calls (keys with even load balancing) are served by one
 // channel's pinned model ID; surface it next to the requested name.
-export const servingModelId = (entry: Pick<UsageEntry, 'model' | 'channel'>): string =>
-  entry.model && !entry.model.includes('/') && entry.channel
+export const servingModelId = (entry: Partial<Pick<UsageEntry, 'model' | 'channel'>>): string =>
+  entry.model && entry.channel && !entry.model.startsWith(`${entry.channel}/`)
     ? `${entry.channel}/${entry.model}`
     : '';
 
@@ -554,8 +554,8 @@ export function UsagePage() {
     for (const group of candidateSummary?.groups ?? []) {
       if (!group.model) continue;
       set.add(group.model);
-      if (!group.model.includes('/') && group.channel)
-        set.add(`${group.model}（${group.channel}/${group.model}）`);
+      const serving = servingModelId(group);
+      if (serving) set.add(`${group.model}（${serving}）`);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [candidateSummary]);

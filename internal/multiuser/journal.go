@@ -250,7 +250,7 @@ func matchModelQuery(event UsageEvent, query string) bool {
 	}
 	model := strings.ToLower(event.Model)
 	serving := model
-	if !strings.Contains(model, "/") && event.Channel != "" {
+	if event.Channel != "" && !strings.HasPrefix(model, strings.ToLower(event.Channel)+"/") {
 		serving = strings.ToLower(event.Channel) + "/" + model
 	}
 	if pin, ok := modelQueryPin(q); ok {
