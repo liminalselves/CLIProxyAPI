@@ -21,6 +21,7 @@ func testAccounts(t *testing.T) (*Store, User, User) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = s.Close() })
 	admin, err := s.Register("alice", "password-alice", "")
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +84,7 @@ func TestAccountsMultipleKeysSessionsAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	if _, ok := reopened.AuthenticateSession(sessionToken); !ok {
 		t.Fatal("session did not survive restart")
 	}
@@ -157,6 +159,7 @@ func TestAccountAndChannelIdentifiersIgnoreStoredLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	user, _, err := reopened.Login(admin.Username, "password-alice")
 	if err != nil || user.Username != admin.Username {
 		t.Fatalf("stored display name changed login identity: %#v %v", user, err)
@@ -278,6 +281,7 @@ func TestUsageAttributionRetryTotalsAndPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	total, groups, err := reopened.Summary(Filter{Owner: "alice"})
 	if err != nil {
 		t.Fatal(err)
@@ -502,6 +506,8 @@ func TestDeleteChannelPermissionsAndCascade(t *testing.T) {
 
 func TestBoardMessagesPagingCapAndDeletePermissions(t *testing.T) {
 	s, admin, bob := testAccounts(t)
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
 	private, err := s.CreateChannel(admin, "573", false)
 	if err != nil {
 		t.Fatal(err)
@@ -513,6 +519,7 @@ func TestBoardMessagesPagingCapAndDeletePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now = now.Add(time.Second)
 	second, err := s.AddBoardMessage(admin, private.ID, "还有 80%，随便用")
 	if err != nil {
 		t.Fatal(err)

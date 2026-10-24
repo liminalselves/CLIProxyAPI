@@ -12,6 +12,7 @@ import { apiClient } from '@/services/api/client';
 import { normalizeAuthFilesResponse } from '@/services/api/authFiles';
 import { sharingCredentials, type SharedCredential } from '@/services/api/sharingCredentials';
 import { downloadBlob } from '@/utils/download';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { getAuthFileRefreshKey } from '@/features/authFiles/manualRefresh';
 import { BaseProviderForm } from '@/features/providers/sheets/forms/BaseProviderForm';
@@ -732,14 +733,16 @@ export function ChannelDetailPage() {
     provider: SharedCredential | null;
   }>({ open: false, provider: null });
 
-  const { data, loading, error, refresh } = useSharingData(
-    useCallback(async () => {
-      const [channels, rawCredentials, stats] = await Promise.all([
-        sharingApi.channels(),
+  // Channel/credential data loads separately from the log-derived summary so
+  // a slow or cold-building usage index never blocks the page or fakes zeros.
+  const { data, loading, error, refresh: refreshCore } = useSharingData(
+    useCallback(async (signal: AbortSignal) => {
+      const [channels, rawCredentials] = await Promise.all([
+        sharingApi.channels(signal),
         apiClient.get<{ credentials: SharedCredential[] }>(sharingPath('/credentials'), {
           params: { channel_id: id },
+          signal,
         }),
-        sharingApi.summary({ channel_id: id ?? '' }),
       ]);
       // AuthFileCard consumes normalized items (cooldownSnapshot, authIndex,
       // recentRequests); reuse the auth-files normalizer on the raw hub payload.
@@ -749,10 +752,23 @@ export function ChannelDetailPage() {
       return {
         channels: channels.channels,
         credentials: normalized.files as unknown as SharedCredential[],
-        stats,
       };
-    }, [id])
+    }, [id]),
+    { keepPreviousData: false, headerRefresh: false, dataKey: id }
   );
+  const {
+    data: stats,
+    loading: statsLoading,
+    error: statsError,
+    refresh: refreshStats,
+  } = useSharingData(
+    useCallback((signal: AbortSignal) => sharingApi.summary({ channel_id: id ?? '' }, signal), [id]),
+    { keepPreviousData: false, headerRefresh: false, dataKey: id }
+  );
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshCore(), refreshStats()]);
+  }, [refreshCore, refreshStats]);
+  useHeaderRefresh(refresh);
 
   const channel = data?.channels.find((item) => item.id === id);
   const credentials = (data?.credentials ?? []).filter((file) => file.kind !== 'provider');
@@ -776,7 +792,7 @@ export function ChannelDetailPage() {
     return names.size;
   }, [data]);
 
-  const statsTotal = data?.stats.total;
+  const statsTotal = stats?.total;
   const failureRate =
     statsTotal && statsTotal.executions > 0
       ? ((statsTotal.failures / statsTotal.executions) * 100).toFixed(1)
@@ -848,7 +864,13 @@ export function ChannelDetailPage() {
                   }
                 >
                   <div className={styles.statsStack}>
-                    <div className={styles.statCards}>
+                    {statsLoading || statsError ? (
+                      // Reuse the shared loading/error surface instead of
+                      // showing fake zeros while the index warms up or fails.
+                      <LoadState loading={statsLoading} error={statsError} />
+                    ) : (
+                      <>
+                        <div className={styles.statCards}>
                       <div className={styles.statCard}>
                         <span className={styles.statLabel}>{t('sharing.routed_calls')}</span>
                         <strong className={styles.statValue}>
@@ -883,7 +905,9 @@ export function ChannelDetailPage() {
                         </span>
                       </div>
                     </div>
-                    <DailyTrend groups={data?.stats.groups ?? []} maxDays={14} />
+                        <DailyTrend groups={stats?.groups ?? []} maxDays={14} />
+                      </>
+                    )}
                   </div>
                 </Card>
                 <Card title={t('sharing.channel_info')}>

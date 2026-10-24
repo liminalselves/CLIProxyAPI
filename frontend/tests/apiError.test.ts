@@ -24,6 +24,23 @@ describe('Management API error parsing', () => {
     });
   });
 
+  test('prefers a top-level machine-readable code beside a string error', () => {
+    // Shape served by the hub during cold index builds (503), e.g.
+    // { error: '...retry shortly', code: 'journal_index_building' }.
+    expect(
+      parseApiErrorResponse(
+        {
+          error: 'usage history index is being prepared; retry shortly',
+          code: 'journal_index_building',
+        },
+        'Request failed with status code 503'
+      )
+    ).toEqual({
+      message: 'usage history index is being prepared; retry shortly',
+      apiCode: 'journal_index_building',
+    });
+  });
+
   test('supports nested error messages and codes', () => {
     expect(
       parseApiErrorResponse(

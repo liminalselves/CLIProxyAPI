@@ -21,6 +21,7 @@ func TestHubOAuthSaveOwnsAndPreservesChannelOnRelogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = store.Close() })
 	alice, err := store.Register("alice", "password-alice", "")
 	if err != nil {
 		t.Fatal(err)

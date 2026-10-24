@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores';
 import { sharingApi } from '@/services/api/sharing';
 import { getTypeLabel } from '@/features/authFiles/constants';
 import { LoadState, PageHeader, Pager } from './shared';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useSharingActions, useSharingData } from './hooks';
 import { groupMarketplaceModels, type MarketplaceModelGroup } from './marketplace';
 import { MarketplaceModelCard } from './MarketplaceModelCard';
@@ -21,15 +22,23 @@ import styles from './Sharing.module.scss';
 export function MarketplacePage() {
   const { t } = useTranslation();
   const base = useAuthStore((state) => state.apiBase);
-  const { data, loading, error, refresh } = useSharingData(
-    useCallback(async () => {
-      const [marketplace, performance] = await Promise.all([
-        sharingApi.marketplace(),
-        sharingApi.marketplacePerformance(),
-      ]);
-      return { ...marketplace, performance: performance.models };
-    }, [])
+  const { data, loading, error, refresh: refreshModels } = useSharingData(
+    useCallback((signal: AbortSignal) => sharingApi.marketplace(signal), []),
+    { headerRefresh: false }
   );
+  const {
+    data: performance,
+    loading: performanceLoading,
+    error: performanceError,
+    refresh: refreshPerformance,
+  } = useSharingData(
+    useCallback((signal: AbortSignal) => sharingApi.marketplacePerformance(signal), []),
+    { headerRefresh: false }
+  );
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshModels(), refreshPerformance()]);
+  }, [refreshModels, refreshPerformance]);
+  useHeaderRefresh(refresh);
   const { copy } = useSharingActions(refresh);
   const [search, setSearch] = useState('');
   const [owner, setOwner] = useState('');
@@ -46,8 +55,8 @@ export function MarketplacePage() {
     if (!loading && !error && page !== currentPage) setPage(currentPage);
   }, [loading, error, page, currentPage]);
   const performanceByModel = useMemo(
-    () => new Map((data?.performance || []).map((entry) => [entry.model, entry])),
-    [data]
+    () => new Map((performance?.models || []).map((entry) => [entry.model, entry])),
+    [performance]
   );
   const groupPerformance = useCallback(
     (group: MarketplaceModelGroup) =>
@@ -108,7 +117,7 @@ export function MarketplacePage() {
           </div>
         </div>
       </Card>
-      <LoadState loading={loading} error={error} />
+      <LoadState loading={loading || performanceLoading} error={error || performanceError} />
       <div className={styles.grid}>
         {pageItems.map((group) => (
           <MarketplaceModelCard

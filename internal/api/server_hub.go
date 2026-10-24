@@ -62,6 +62,7 @@ func (s *Server) initializeHub(cfg *config.Config) {
 		return
 	}
 	s.hub = &multiuser.Controller{Store: store}
+	store.PrepareJournal()
 	if s.accessManager == nil {
 		s.accessManager = sdkaccess.NewManager()
 	}

@@ -121,12 +121,19 @@ type state struct {
 }
 
 type Store struct {
-	mu         sync.RWMutex
-	data       state
-	dir        string
-	sessionTTL time.Duration
-	now        func() time.Time
-	logMu      sync.Mutex
+	mu       sync.RWMutex
+	data     state
+	keyIndex map[string]string
+	// Writers serialize persistence without blocking readers of committed state.
+	writeMu     sync.Mutex
+	persist     func(path string, data []byte) error
+	indexMu     sync.Mutex
+	index       *journalIndex
+	indexClosed bool
+	dir         string
+	sessionTTL  time.Duration
+	now         func() time.Time
+	logMu       sync.Mutex
 }
 
 func Open(dir string, sessionTTL time.Duration) (*Store, error) {
@@ -136,7 +143,7 @@ func Open(dir string, sessionTTL time.Duration) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create account directory: %w", err)
 	}
-	s := &Store{dir: dir, sessionTTL: sessionTTL, now: time.Now}
+	s := &Store{dir: dir, sessionTTL: sessionTTL, now: time.Now, persist: atomicWrite}
 	s.data = state{Users: map[string]userRecord{}, Keys: map[string]keyRecord{}, Invites: map[string]Invite{}, Sessions: map[string]session{}, Channels: map[string]Channel{}, Messages: map[string]BoardMessage{}}
 	raw, err := os.ReadFile(filepath.Join(dir, "accounts.db"))
 	if err == nil {
@@ -152,6 +159,7 @@ func Open(dir string, sessionTTL time.Duration) (*Store, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read accounts: %w", err)
 	}
+	s.keyIndex = buildKeyIndex(s.data.Keys)
 	return s, nil
 }
 
@@ -168,29 +176,93 @@ func hashToken(token string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// Publish only durable state so failed writes cannot consume invites or revoke keys.
 func (s *Store) mutate(fn func(*state) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	raw, err := json.Marshal(s.data)
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	s.mu.RLock()
+	next := cloneState(&s.data)
+	s.mu.RUnlock()
+	if err := fn(&next); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
 	}
-	var next state
-	if err = json.Unmarshal(raw, &next); err != nil {
-		return err
+	persist := s.persist
+	if persist == nil {
+		persist = atomicWrite
 	}
-	if err = fn(&next); err != nil {
-		return err
-	}
-	raw, err = json.MarshalIndent(next, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err = atomicWrite(filepath.Join(s.dir, "accounts.db"), raw); err != nil {
+	if err = persist(filepath.Join(s.dir, "accounts.db"), raw); err != nil {
 		return fmt.Errorf("save accounts: %w", err)
 	}
+	keyIndex := buildKeyIndex(next.Keys)
+	s.mu.Lock()
 	s.data = next
+	s.keyIndex = keyIndex
+	s.mu.Unlock()
 	return nil
+}
+
+func cloneState(src *state) state {
+	next := state{
+		Users:    make(map[string]userRecord, len(src.Users)),
+		Keys:     make(map[string]keyRecord, len(src.Keys)),
+		Invites:  make(map[string]Invite, len(src.Invites)),
+		Sessions: make(map[string]session, len(src.Sessions)),
+		Channels: make(map[string]Channel, len(src.Channels)),
+		Messages: make(map[string]BoardMessage, len(src.Messages)),
+	}
+	for id, u := range src.Users {
+		next.Users[id] = u // userRecord holds no reference types
+	}
+	for id, key := range src.Keys {
+		next.Keys[id] = key.deepCopy()
+	}
+	for id, invite := range src.Invites {
+		if invite.UsedBy != nil {
+			invite.UsedBy = append([]string{}, invite.UsedBy...)
+		}
+		next.Invites[id] = invite
+	}
+	for id, ses := range src.Sessions {
+		next.Sessions[id] = ses // session holds no reference types
+	}
+	for id, ch := range src.Channels {
+		if ch.NextCredentialIndex != nil {
+			indexes := make(map[string]int, len(ch.NextCredentialIndex))
+			for kind, index := range ch.NextCredentialIndex {
+				indexes[kind] = index
+			}
+			ch.NextCredentialIndex = indexes
+		}
+		next.Channels[id] = ch
+	}
+	for id, m := range src.Messages {
+		next.Messages[id] = m // BoardMessage holds no reference types
+	}
+	return next
+}
+
+// deepCopy clones the nested slice and pointer inside a key record.
+func (r keyRecord) deepCopy() keyRecord {
+	if r.BlockedModels != nil {
+		r.BlockedModels = append([]string{}, r.BlockedModels...)
+	}
+	if r.RevokedAt != nil {
+		revoked := *r.RevokedAt
+		r.RevokedAt = &revoked
+	}
+	return r
+}
+
+func buildKeyIndex(keys map[string]keyRecord) map[string]string {
+	index := make(map[string]string, len(keys))
+	for id, key := range keys {
+		index[key.Hash] = id
+	}
+	return index
 }
 
 func atomicWrite(path string, data []byte) error {
@@ -441,14 +513,19 @@ func (s *Store) AuthenticateKey(secret string) (User, APIKey, bool) {
 	hash := hashToken(secret)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, key := range s.data.Keys {
-		if key.Hash != hash || key.Disabled || key.RevokedAt != nil {
-			continue
-		}
-		u, ok := s.data.Users[key.Owner]
-		return u.User, key.APIKey.clone(), ok && !u.Disabled
+	id, ok := s.keyIndex[hash]
+	if !ok {
+		return User{}, APIKey{}, false
 	}
-	return User{}, APIKey{}, false
+	key, ok := s.data.Keys[id]
+	if !ok || key.Hash != hash || key.Disabled || key.RevokedAt != nil {
+		return User{}, APIKey{}, false
+	}
+	u, ok := s.data.Users[key.Owner]
+	if !ok || u.Disabled {
+		return User{}, APIKey{}, false
+	}
+	return u.User, key.APIKey.clone(), true
 }
 
 func (s *Store) Keys(actor User) []APIKey {

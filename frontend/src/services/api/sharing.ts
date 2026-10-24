@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { ApiError } from '@/types';
 import type {
   Account,
   AuditEntry,
@@ -39,6 +40,64 @@ const normalizePersonalKey = (key: PersonalKeyResponse): PersonalKey => ({
 });
 
 export const sharingPath = (path: string) => `/v8/hub${path}`;
+
+/** Backend code for "the shared usage index is still cold-building". */
+export const JOURNAL_INDEX_BUILDING = 'journal_index_building';
+
+const isIndexBuilding = (error: unknown): error is ApiError =>
+  !!error &&
+  typeof error === 'object' &&
+  (error as ApiError).status === 503 &&
+  (error as ApiError).apiCode === JOURNAL_INDEX_BUILDING;
+
+const delayOrAbort = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (!signal) {
+      setTimeout(resolve, ms);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'));
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  });
+
+/** Retries only the explicit cold-index state (503 + journal_index_building,
+ * served with Retry-After: 2) every 2s. The promise stays pending while
+ * retrying so callers keep showing their loading state instead of a terminal
+ * error; aborting the signal cancels both the request and the pending wait.
+ * No other status or code is ever retried here. */
+export async function retryWhileIndexBuilding<T>(
+  request: (signal?: AbortSignal) => Promise<T>,
+  signal?: AbortSignal,
+  delayMs = 2000
+): Promise<T> {
+  for (;;) {
+    try {
+      return await request(signal);
+    } catch (error) {
+      if (!isIndexBuilding(error) || signal?.aborted) throw error;
+      await delayOrAbort(delayMs, signal);
+    }
+  }
+}
+
+const indexAwareGet = <T>(
+  path: string,
+  params: Record<string, string | number> | undefined,
+  signal?: AbortSignal
+) =>
+  retryWhileIndexBuilding(
+    (attempt) => apiClient.get<T>(path, { params, signal: attempt }),
+    signal
+  );
+
 export const sharingApi = {
   status: () => apiClient.get<{ needs_setup: boolean }>(sharingPath('/status')),
   me: () => apiClient.get<{ user: Account }>(sharingPath('/me')),
@@ -47,7 +106,8 @@ export const sharingApi = {
   register: (body: { username: string; password: string; invite: string }) =>
     apiClient.post<{ user: Account }>(sharingPath('/register'), body),
   logout: () => apiClient.post(sharingPath('/logout')),
-  channels: () => apiClient.get<{ channels: Channel[] }>(sharingPath('/channels')),
+  channels: (signal?: AbortSignal) =>
+    apiClient.get<{ channels: Channel[] }>(sharingPath('/channels'), { signal }),
   createChannel: (body: { slug: string; public?: boolean }) =>
     apiClient.post<{ channel: Channel }>(sharingPath('/channels'), body),
   updateChannel: (
@@ -94,15 +154,20 @@ export const sharingApi = {
       api_key,
       ...(proxy_url ? { proxy_url } : {}),
     }),
-  marketplace: () =>
-    apiClient.get<{ models: MarketplaceModel[]; channels: Channel[] }>(sharingPath('/marketplace')),
-  marketplacePerformance: () =>
-    apiClient.get<{ models: ModelPerformance[] }>(sharingPath('/marketplace/performance')),
-  keys: async () => {
-    const response = await apiClient.get<{ keys: PersonalKeyResponse[] }>(sharingPath('/keys'));
+  marketplace: (signal?: AbortSignal) =>
+    apiClient.get<{ models: MarketplaceModel[]; channels: Channel[] }>(sharingPath('/marketplace'), {
+      signal,
+    }),
+  marketplacePerformance: (signal?: AbortSignal) =>
+    indexAwareGet<{ models: ModelPerformance[] }>(sharingPath('/marketplace/performance'), undefined, signal),
+  keys: async (signal?: AbortSignal) => {
+    const response = await apiClient.get<{ keys: PersonalKeyResponse[] }>(sharingPath('/keys'), {
+      signal,
+    });
     return { keys: response.keys.map(normalizePersonalKey) };
   },
-  allKeys: () => apiClient.get<{ keys: SharedKeyRef[] }>(sharingPath('/keys/all')),
+  allKeys: (signal?: AbortSignal) =>
+    apiClient.get<{ keys: SharedKeyRef[] }>(sharingPath('/keys/all'), { signal }),
   createKey: async (name: string) => {
     const response = await apiClient.post<{ key: PersonalKeyResponse; secret: string }>(
       sharingPath('/keys'),
@@ -115,7 +180,8 @@ export const sharingApi = {
     body: { name?: string; disabled?: boolean; auto_balance?: boolean; blocked_models?: string[] }
   ) => apiClient.patch(sharingPath(`/keys/${encodeURIComponent(id)}`), body),
   revokeKey: (id: string) => apiClient.delete(sharingPath(`/keys/${encodeURIComponent(id)}`)),
-  users: () => apiClient.get<{ users: Account[] }>(sharingPath('/users')),
+  users: (signal?: AbortSignal) =>
+    apiClient.get<{ users: Account[] }>(sharingPath('/users'), { signal }),
   updateUser: (id: string, body: { disabled?: boolean; role?: string }) =>
     apiClient.patch(sharingPath(`/users/${encodeURIComponent(id)}`), body),
   invites: () => apiClient.get<{ invites: Invitation[] }>(sharingPath('/invites')),
@@ -125,14 +191,11 @@ export const sharingApi = {
   password: (current_password: string, password: string) =>
     apiClient.post(sharingPath('/me/password'), { current_password, password }),
   usage: (params: Record<string, string | number>, signal?: AbortSignal) =>
-    apiClient.get<HistoryPage<UsageEntry>>(sharingPath('/usage'), { params, signal }),
+    indexAwareGet<HistoryPage<UsageEntry>>(sharingPath('/usage'), params, signal),
   summary: (params: Record<string, string | number>, signal?: AbortSignal) =>
-    apiClient.get<{ total: Summary; groups: Summary[] }>(sharingPath('/usage/summary'), {
-      params,
-      signal,
-    }),
+    indexAwareGet<{ total: Summary; groups: Summary[] }>(sharingPath('/usage/summary'), params, signal),
   audits: (params: Record<string, string | number>, signal?: AbortSignal) =>
-    apiClient.get<HistoryPage<AuditEntry>>(sharingPath('/audit'), { params, signal }),
+    indexAwareGet<HistoryPage<AuditEntry>>(sharingPath('/audit'), params, signal),
   credential: (routeID: string, body: Record<string, unknown>) =>
     apiClient.patch(sharingPath(`/credentials/${encodeURIComponent(routeID)}`), body),
   claim: (routeID: string, channel_id: string) =>

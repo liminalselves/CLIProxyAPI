@@ -340,6 +340,7 @@ func TestHubAccountsCredentialsRoutingAndTransparentUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	reloadedUser, userOK := reopened.User("alice")
 	reloadedChannel, channelOK := reopened.Channel(aliceCh.ID)
 	if !userOK || reloadedUser.Username != "alice" || !channelOK || reloadedChannel.Slug != "gpt" || reloadedChannel.Prefix != "gpt" {

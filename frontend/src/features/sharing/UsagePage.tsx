@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
@@ -27,6 +27,7 @@ import { DailyTrend, LoadState, PageHeader, Pager } from './shared';
 import { date, duration, number, useSharingData } from './hooks';
 import {
   buildModelCandidateQuery,
+  buildUsageFilterQuery,
   resolveUsageKey,
   resolveUsageModel,
   type UsageKeyOption,
@@ -453,44 +454,48 @@ export function UsagePage() {
     keys: PersonalKey[];
     users: Account[];
     allKeys: SharedKeyRef[];
-  } | null>(null);
+  }>({ channels: [], keys: [], users: [], allKeys: [] });
   const [selected, setSelected] = useState<UsageEntry | null>(null);
 
+  // Filter suggestions load per scope and independently: each list lands when
+  // it arrives, one failing list never hides the others or the usage records,
+  // and pieces that already loaded are not refetched on scope switches.
+  const optionsLoaded = useRef(new Set<keyof typeof options>());
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [channels, keys, users, allKeys] = await Promise.all([
-          sharingApi.channels(),
-          sharingApi.keys(),
-          sharingApi.users(),
-          sharingApi.allKeys(),
-        ]);
-        if (!cancelled)
-          setOptions({
-            channels: channels.channels,
-            keys: keys.keys,
-            users: users.users,
-            allKeys: allKeys.keys,
-          });
-      } catch {
-        // Usage records remain available if filter suggestions fail to load.
-      }
-    })();
+    const controller = new AbortController();
+    const wanted: [keyof typeof options, (signal: AbortSignal) => Promise<unknown>][] = [
+      ['channels', async (signal) => (await sharingApi.channels(signal)).channels],
+    ];
+    if (scope === 'mine') {
+      wanted.push(['keys', async (signal) => (await sharingApi.keys(signal)).keys]);
+    } else {
+      wanted.push(
+        ['users', async (signal) => (await sharingApi.users(signal)).users],
+        ['allKeys', async (signal) => (await sharingApi.allKeys(signal)).keys]
+      );
+    }
+    for (const [key, fetcher] of wanted) {
+      if (optionsLoaded.current.has(key)) continue;
+      void fetcher(controller.signal).then(
+        (value) => {
+          if (controller.signal.aborted) return;
+          optionsLoaded.current.add(key);
+          setOptions((current) => ({ ...current, [key]: value }));
+        },
+        () => {
+          // Leave this suggestion list empty; it retries on the next scope change.
+        }
+      );
+    }
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, []);
+  }, [scope]);
 
-  const filterQuery = useMemo(() => {
-    const values = new URLSearchParams(queryString);
-    values.delete('page');
-    values.delete('page_size');
-    values.delete('scope');
-    if (scope === 'mine') values.set('consumer', me);
-    if (scope === 'contributed') values.set('owner', me);
-    return values.toString();
-  }, [queryString, scope, me]);
+  const filterQuery = useMemo(
+    () => buildUsageFilterQuery(queryString, scope, me),
+    [queryString, scope, me]
+  );
   const {
     data: summary,
     loading: summaryLoading,
@@ -498,7 +503,8 @@ export function UsagePage() {
     refresh: refreshSummary,
   } = useSharingData(
     useCallback(
-      () => sharingApi.summary(Object.fromEntries(new URLSearchParams(filterQuery))),
+      (signal: AbortSignal) =>
+        sharingApi.summary(Object.fromEntries(new URLSearchParams(filterQuery)), signal),
       [filterQuery]
     ),
     { keepPreviousData: false, headerRefresh: false }
@@ -510,15 +516,20 @@ export function UsagePage() {
     refresh: refreshUsage,
   } = useSharingData(
     useCallback(
-      () =>
-        sharingApi.usage({
-          ...Object.fromEntries(new URLSearchParams(filterQuery)),
-          page,
-          page_size: pageSize,
-        }),
+      (signal: AbortSignal) =>
+        sharingApi.usage(
+          {
+            ...Object.fromEntries(new URLSearchParams(filterQuery)),
+            page,
+            page_size: pageSize,
+          },
+          signal
+        ),
       [filterQuery, page, pageSize]
     ),
-    { keepPreviousData: false, headerRefresh: false }
+    // Same filter scope keeps the previous rows while a new page loads; a
+    // scope/filter/account change clears them so no out-of-scope rows show.
+    { keepPreviousData: false, headerRefresh: false, dataKey: filterQuery }
   );
   useEffect(() => {
     const next = normalizePaginationParams(params, !loading && !error ? usage?.total : undefined);
@@ -529,14 +540,19 @@ export function UsagePage() {
 
   // Model suggestions use a summary that ignores the applied model filter and
   // pagination, so choosing a model never shrinks the dropdown to itself.
+  // Without an applied model that query is exactly the main filter query, so
+  // the main summary doubles as the candidate source (no duplicate request).
   const candidateQuery = useMemo(
     () => buildModelCandidateQuery(queryString, scope, me),
     [queryString, scope, me]
   );
   const { data: candidateSummary, refresh: refreshCandidates } = useSharingData(
     useCallback(
-      () => sharingApi.summary(Object.fromEntries(new URLSearchParams(candidateQuery))),
-      [candidateQuery]
+      (signal: AbortSignal) =>
+        appliedModel
+          ? sharingApi.summary(Object.fromEntries(new URLSearchParams(candidateQuery)), signal)
+          : Promise.resolve(null),
+      [appliedModel, candidateQuery]
     ),
     { keepPreviousData: false, headerRefresh: false }
   );
@@ -551,14 +567,15 @@ export function UsagePage() {
   // one pins the filter to that exact serving channel server-side.
   const models = useMemo(() => {
     const set = new Set<string>();
-    for (const group of candidateSummary?.groups ?? []) {
+    const groups = appliedModel ? candidateSummary?.groups : summary?.groups;
+    for (const group of groups ?? []) {
       if (!group.model) continue;
       set.add(group.model);
       const serving = servingModelId(group);
       if (serving) set.add(`${group.model}（${serving}）`);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [candidateSummary]);
+  }, [appliedModel, candidateSummary, summary]);
 
   const keyLabel = useCallback(
     (key: PersonalKey | SharedKeyRef) =>
@@ -567,7 +584,6 @@ export function UsagePage() {
   );
 
   const keyOptions = useMemo<UsageKeyOption[]>(() => {
-    if (!options) return [];
     if (scope === 'mine')
       return options.keys.map((key) => ({ label: keyLabel(key), keyId: key.id }));
     return [
@@ -735,7 +751,7 @@ export function UsagePage() {
               ariaLabel={t('sharing.channel')}
               options={[
                 { value: '', label: t('sharing.all_channels') },
-                ...(options?.channels ?? []).map((channel) => ({
+                ...options.channels.map((channel) => ({
                   value: channel.id,
                   label: `${channel.slug}（${channel.owner}）`,
                 })),

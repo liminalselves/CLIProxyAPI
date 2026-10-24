@@ -22,7 +22,7 @@ describe('key model filter', () => {
     });
     try {
       const response = await sharingApi.keys();
-      expect(get).toHaveBeenCalledWith('/v8/hub/keys');
+      expect(get).toHaveBeenCalledWith('/v8/hub/keys', { signal: undefined });
       expect(response.keys.map((entry) => entry.blocked_models)).toEqual([[], []]);
     } finally {
       get.mockRestore();

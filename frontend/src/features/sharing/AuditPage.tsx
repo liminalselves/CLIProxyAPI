@@ -24,8 +24,12 @@ export function AuditPage() {
   const [action, setAction] = useState('');
   const [filter, setFilter] = useState({ actor: '', action: '' });
   const { data, loading, error } = useSharingData(
-    useCallback(() => sharingApi.audits({ ...filter, page, page_size: 50 }), [filter, page]),
-    { keepPreviousData: false }
+    useCallback(
+      (signal: AbortSignal) => sharingApi.audits({ ...filter, page, page_size: 50 }, signal),
+      [filter, page]
+    ),
+    // Page turns keep the previous rows; changing the filter drops them.
+    { keepPreviousData: false, dataKey: JSON.stringify([filter.actor, filter.action]) }
   );
   useEffect(() => {
     if (loading || error || !data) return;

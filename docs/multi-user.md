@@ -305,10 +305,37 @@ password hashes, hashed sessions, key records, invitations, channel definitions
 (including slug prefix, `public` flag, announcement, and per-credential-type
 index counters) and channel board messages.
 `journal/YYYY-MM-DD.jsonl` is the append-and-sync event journal. Both are under
-`multi-user.data-dir`; back up this directory together with upstream auth files.
-The journal is retained until you remove it, with no automatic history expiration.
-Queries filter by UTC dates and scan the relevant daily files; this deliberately
-avoids adding a database dependency for a small site.
+`multi-user.data-dir`; back up the account file and journal together with upstream
+auth files. History has no automatic expiration, and each event is still synced
+before its append completes. Account writes publish their new in-memory snapshot
+only after the atomic file replacement succeeds; authentication reads do not wait
+for that disk I/O. Run only one proxy instance against a data directory.
+
+`journal-index.sqlite` is a rebuildable query index, not a second source of truth.
+It uses the pure-Go SQLite driver and WAL on a local filesystem. The first startup
+imports existing history in background batches; subsequent starts resume committed
+file offsets, and queries import only newly appended records. Import checkpoints
+and indexed rows commit together. Changed or removed daily files invalidate their
+indexed records. Malformed or incomplete records fail the import rather than
+silently producing incomplete totals.
+
+While the initial index is being prepared, history and performance endpoints return
+HTTP 503 with `code: journal_index_building` and `Retry-After: 2`. The console retries
+that specific state automatically and cancels retries when leaving the page. Other
+pages and event appends do not wait for history construction. Lists read only the
+selected page from the journal; summary and performance queries use the index, with
+bounded, data-versioned aggregate caches (at most 32 results and 32,768 groups or
+buckets). No history is sampled and request/retry and Token accounting stay unchanged.
+
+The index and its `-wal`/`-shm` sidecars are not required in backups. To rebuild the
+index, stop the proxy, remove only those derived files, and restart; never remove
+`accounts.db` or the `journal/` directory for this operation. Large histories need
+additional disk space and a one-time import before their first query is available.
+
+To compare cold-index construction and indexed queries on 100,000 and 1,000,000
+synthetic events, run `go test ./internal/multiuser -run '^$' -bench
+'^BenchmarkJournalQueries$' -benchtime=1x -benchmem -v` on one line. Keep construction
+cost separate from query latency and compare on an otherwise idle machine.
 
 ## HTTP API
 

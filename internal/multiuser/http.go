@@ -1,6 +1,7 @@
 package multiuser
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -49,6 +50,9 @@ func (h *Controller) Admin() gin.HandlerFunc {
 func replyError(c *gin.Context, err error) {
 	status := http.StatusInternalServerError
 	switch {
+	case errors.Is(err, context.Canceled):
+		c.Status(499)
+		return
 	case errors.Is(err, ErrInvalid):
 		status = http.StatusBadRequest
 	case errors.Is(err, ErrDenied):
@@ -57,6 +61,10 @@ func replyError(c *gin.Context, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, ErrConflict):
 		status = http.StatusConflict
+	case errors.Is(err, ErrJournalBuilding):
+		c.Header("Retry-After", "2")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error(), "code": "journal_index_building"})
+		return
 	}
 	if status == 500 {
 		log.WithError(err).Error("multi-user: operation failed")
@@ -415,13 +423,24 @@ func queryFilter(c *gin.Context) (Filter, error) {
 	return f, nil
 }
 
+func (h *Controller) historyReady(c *gin.Context) bool {
+	if err := h.Store.JournalReady(); err != nil {
+		replyError(c, err)
+		return false
+	}
+	return true
+}
+
 func (h *Controller) usage(c *gin.Context) {
 	f, err := queryFilter(c)
 	if err != nil {
 		replyError(c, err)
 		return
 	}
-	items, total, err := h.Store.Usage(f)
+	if !h.historyReady(c) {
+		return
+	}
+	items, total, err := h.Store.UsageContext(c.Request.Context(), f)
 	if err != nil {
 		replyError(c, err)
 		return
@@ -434,7 +453,10 @@ func (h *Controller) calls(c *gin.Context) {
 		replyError(c, err)
 		return
 	}
-	items, total, err := h.Store.Calls(f)
+	if !h.historyReady(c) {
+		return
+	}
+	items, total, err := h.Store.CallsContext(c.Request.Context(), f)
 	if err != nil {
 		replyError(c, err)
 		return
@@ -447,7 +469,10 @@ func (h *Controller) summary(c *gin.Context) {
 		replyError(c, err)
 		return
 	}
-	total, groups, err := h.Store.Summary(f)
+	if !h.historyReady(c) {
+		return
+	}
+	total, groups, err := h.Store.SummaryContext(c.Request.Context(), f)
 	if err != nil {
 		replyError(c, err)
 		return
@@ -460,7 +485,10 @@ func (h *Controller) audits(c *gin.Context) {
 		replyError(c, err)
 		return
 	}
-	items, total, err := h.Store.Audits(f)
+	if !h.historyReady(c) {
+		return
+	}
+	items, total, err := h.Store.AuditsContext(c.Request.Context(), f)
 	if err != nil {
 		replyError(c, err)
 		return

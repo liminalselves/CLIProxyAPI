@@ -27,6 +27,9 @@ func (h *Handler) SetHubStore(store *multiuser.Store) { h.hubStore = store }
 func hubError(c *gin.Context, err error) {
 	status := 500
 	switch {
+	case errors.Is(err, context.Canceled):
+		c.Status(499)
+		return
 	case errors.Is(err, multiuser.ErrDenied):
 		status = 403
 	case errors.Is(err, multiuser.ErrInvalid):
@@ -35,6 +38,10 @@ func hubError(c *gin.Context, err error) {
 		status = 404
 	case errors.Is(err, multiuser.ErrConflict):
 		status = 409
+	case errors.Is(err, multiuser.ErrJournalBuilding):
+		c.Header("Retry-After", "2")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error(), "code": "journal_index_building"})
+		return
 	}
 	if status == 500 {
 		log.WithError(err).Error("multi-user: credential operation failed")
@@ -745,7 +752,11 @@ func (h *Handler) HubMarketplace(c *gin.Context) {
 // model ID so the marketplace can show TPS, latency, TTFT and success-rate
 // trends without each client rescanning the usage journal.
 func (h *Handler) HubMarketplacePerformance(c *gin.Context) {
-	perf, err := h.hubStore.ModelPerformance(time.Now())
+	if err := h.hubStore.JournalReady(); err != nil {
+		hubError(c, err)
+		return
+	}
+	perf, err := h.hubStore.ModelPerformanceContext(c.Request.Context(), time.Now())
 	if err != nil {
 		hubError(c, err)
 		return

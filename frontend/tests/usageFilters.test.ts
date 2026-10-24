@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { matchesAutocompleteQuery } from '../src/components/ui/autocompleteMatching';
 import {
   buildModelCandidateQuery,
+  buildUsageFilterQuery,
   resolveUsageKey,
   resolveUsageModel,
   type UsageKeyOption,
@@ -33,6 +34,39 @@ describe('usage autocomplete candidates', () => {
     expect(parsed.get('from')).toBe('2026-10-01T00:00:00.000Z');
     expect(parsed.get('owner')).toBe('alice');
     expect(parsed.get('consumer')).toBeNull();
+  });
+
+  test('candidate query equals the main filter query when no model filter is applied', () => {
+    // This equality is what lets the usage page reuse its main summary as the
+    // model candidate source instead of issuing a duplicate summary request.
+    const cases: [string, 'mine' | 'contributed' | 'site', string][] = [
+      [
+        'scope=site&channel_id=c1&consumer=bob&from=2026-10-01T00:00:00.000Z&to=2026-10-02T00:00:00.000Z',
+        'site',
+        'alice',
+      ],
+      ['key_id=k9&page=4&page_size=100', 'mine', 'alice'],
+      ['scope=contributed&key_id=k9&key=phone', 'contributed', 'alice'],
+    ];
+    for (const [query, scope, me] of cases) {
+      expect(buildModelCandidateQuery(query, scope, me)).toBe(buildUsageFilterQuery(query, scope, me));
+    }
+  });
+
+  test('applying a model diverges the candidate query from the main filter query', () => {
+    const query = 'model=kimi-k3&channel_id=c1';
+    expect(buildModelCandidateQuery(query, 'mine', 'alice')).not.toBe(
+      buildUsageFilterQuery(query, 'mine', 'alice')
+    );
+    expect(new URLSearchParams(buildUsageFilterQuery(query, 'mine', 'alice')).get('model')).toBe(
+      'kimi-k3'
+    );
+  });
+
+  test('pagination changes do not alter the candidate query', () => {
+    expect(buildModelCandidateQuery('model=x&page=2&page_size=100', 'mine', 'alice')).toBe(
+      buildModelCandidateQuery('model=x&page=9&page_size=50', 'mine', 'alice')
+    );
   });
 
   test('candidate query keeps scope identity for mine and site', () => {

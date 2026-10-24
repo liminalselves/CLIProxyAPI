@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { sharingApi } from '@/services/api/sharing';
 import { useAuthStore } from '@/stores';
 import { formatCompactNumber } from '@/utils/format';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { DailyTrend, LoadState, PageHeader } from './shared';
 import { useSharingData, number } from './hooks';
 import { formatMS, formatPercent, performanceMetrics } from './marketplace';
@@ -27,26 +28,64 @@ export function SharingDashboard() {
   const { t } = useTranslation();
   const account = useAuthStore((state) => state.account);
   const username = account?.username || '';
-  const { data, loading, error } = useSharingData(
-    useCallback(async () => {
-      const [site, mine, contributed, channels, marketplace, performance, keys] =
-        await Promise.all([
-          sharingApi.summary({}),
-          sharingApi.summary({ consumer: username }),
-          sharingApi.summary({ owner: username }),
-          sharingApi.channels(),
-          sharingApi.marketplace(),
-          sharingApi.marketplacePerformance(),
-          sharingApi.keys(),
+
+  // Catalog data is light and renders immediately; the log-derived summaries
+  // and the performance window load in their own groups so a slow (or
+  // cold-building) index never blocks the rest of the dashboard.
+  const {
+    data: light,
+    loading: lightLoading,
+    error: lightError,
+    refresh: refreshLight,
+  } = useSharingData(
+    useCallback(async (signal: AbortSignal) => {
+      const [channels, marketplace, keys] = await Promise.all([
+        sharingApi.channels(signal),
+        sharingApi.marketplace(signal),
+        sharingApi.keys(signal),
+      ]);
+      return { channels, marketplace, keys };
+    }, []),
+    { keepPreviousData: false, headerRefresh: false, dataKey: username }
+  );
+  const {
+    data: summaries,
+    loading: summariesLoading,
+    error: summariesError,
+    refresh: refreshSummaries,
+  } = useSharingData(
+    useCallback(
+      async (signal: AbortSignal) => {
+        const [site, mine, contributed] = await Promise.all([
+          sharingApi.summary({}, signal),
+          sharingApi.summary({ consumer: username }, signal),
+          sharingApi.summary({ owner: username }, signal),
         ]);
-      return { site, mine, contributed, channels, marketplace, performance, keys };
-    }, [username])
+        return { site, mine, contributed };
+      },
+      [username]
+    ),
+    { keepPreviousData: false, headerRefresh: false, dataKey: username }
+  );
+  const {
+    data: performance,
+    loading: performanceLoading,
+    error: performanceError,
+    refresh: refreshPerformance,
+  } = useSharingData(
+    useCallback((signal: AbortSignal) => sharingApi.marketplacePerformance(signal), []),
+    { headerRefresh: false }
+  );
+  useHeaderRefresh(
+    useCallback(async () => {
+      await Promise.all([refreshLight(), refreshSummaries(), refreshPerformance()]);
+    }, [refreshLight, refreshSummaries, refreshPerformance])
   );
 
   const siteStats = useMemo(() => {
-    const total = data?.site.total;
-    const channels = data?.channels.channels ?? [];
-    const models = data?.marketplace.models ?? [];
+    const total = summaries?.site.total;
+    const channels = light?.channels.channels ?? [];
+    const models = light?.marketplace.models ?? [];
     const failureRate =
       total && total.executions > 0 ? ((total.failures / total.executions) * 100).toFixed(1) : null;
     const stats: { key: string; label: string; value: string; title?: string; hint: string }[] = [
@@ -74,14 +113,14 @@ export function SharingDashboard() {
       {
         key: 'models',
         label: t('sharing.stat_available_models'),
-        value: data ? number(models.filter((model) => model.available).length) : '—',
-        hint: data ? t('sharing.stat_models_available_hint', { total: models.length }) : '',
+        value: light ? number(models.filter((model) => model.available).length) : '—',
+        hint: light ? t('sharing.stat_models_available_hint', { total: models.length }) : '',
       },
       {
         key: 'channels',
         label: t('sharing.channel'),
-        value: data ? number(channels.length) : '—',
-        hint: data
+        value: light ? number(channels.length) : '—',
+        hint: light
           ? t('sharing.stat_channels_hint', {
               published: channels.filter((channel) => channel.published).length,
             })
@@ -89,12 +128,12 @@ export function SharingDashboard() {
       },
     ];
     return stats;
-  }, [data, t]);
+  }, [light, summaries, t]);
 
   const last24h = useMemo(() => {
-    if (!data) return null;
+    if (!performance) return null;
     const merged = emptyPerformance();
-    data.performance.models.forEach((entry) => {
+    performance.models.forEach((entry) => {
       merged.requests += entry.totals.requests;
       merged.failures += entry.totals.failures;
       merged.latency_ms += entry.totals.latency_ms;
@@ -105,11 +144,11 @@ export function SharingDashboard() {
       merged.generation_ms += entry.totals.generation_ms;
     });
     return performanceMetrics(merged);
-  }, [data]);
+  }, [performance]);
 
   const myStats = useMemo(() => {
-    const keys = data?.keys.keys ?? [];
-    const channels = data?.channels.channels ?? [];
+    const keys = light?.keys.keys ?? [];
+    const channels = light?.channels.channels ?? [];
     const owned = channels.filter((channel) => channel.owner === username);
     return {
       keysActive: keys.filter((key) => !key.disabled).length,
@@ -117,7 +156,7 @@ export function SharingDashboard() {
       channelsOwned: owned.length,
       channelsPublished: owned.filter((channel) => channel.published).length,
     };
-  }, [data, username]);
+  }, [light, username]);
 
   return (
     <div className={styles.page}>
@@ -125,7 +164,10 @@ export function SharingDashboard() {
         title={t('nav.dashboard')}
         hint={t('sharing.dashboard_hint', { name: username })}
       />
-      <LoadState loading={loading} error={error} />
+      <LoadState
+        loading={lightLoading || summariesLoading || performanceLoading}
+        error={summariesError || performanceError || lightError}
+      />
 
       <div className={styles.sectionHead}>
         <h2>{t('sharing.dashboard_site_section')}</h2>
@@ -142,7 +184,9 @@ export function SharingDashboard() {
         ))}
       </div>
       <Card title={t('sharing.performance_window')}>
-        {last24h && last24h.requests > 0 ? (
+        {!performance ? (
+          <LoadState loading={performanceLoading} error={performanceError} />
+        ) : last24h && last24h.requests > 0 ? (
           <div className={styles.statCards}>
             <div className={styles.statCard}>
               <span className={styles.statLabel}>{t('sharing.requests_label')}</span>
@@ -175,12 +219,12 @@ export function SharingDashboard() {
             <div className={styles.statRow}>
               <div className={styles.stat}>
                 {t('sharing.requests_label')}
-                <strong>{data ? number(data.mine.total.calls) : '—'}</strong>
+                <strong>{summaries ? number(summaries.mine.total.calls) : '—'}</strong>
               </div>
               <div className={styles.stat}>
                 {t('sharing.total_tokens')}
-                <strong title={data ? number(data.mine.total.total_tokens) : undefined}>
-                  {data ? formatCompactNumber(data.mine.total.total_tokens) : '—'}
+                <strong title={summaries ? number(summaries.mine.total.total_tokens) : undefined}>
+                  {summaries ? formatCompactNumber(summaries.mine.total.total_tokens) : '—'}
                 </strong>
               </div>
             </div>
@@ -194,12 +238,14 @@ export function SharingDashboard() {
             <div className={styles.statRow}>
               <div className={styles.stat}>
                 {t('sharing.requests_label')}
-                <strong>{data ? number(data.contributed.total.calls) : '—'}</strong>
+                <strong>{summaries ? number(summaries.contributed.total.calls) : '—'}</strong>
               </div>
               <div className={styles.stat}>
                 {t('sharing.total_tokens')}
-                <strong title={data ? number(data.contributed.total.total_tokens) : undefined}>
-                  {data ? formatCompactNumber(data.contributed.total.total_tokens) : '—'}
+                <strong
+                  title={summaries ? number(summaries.contributed.total.total_tokens) : undefined}
+                >
+                  {summaries ? formatCompactNumber(summaries.contributed.total.total_tokens) : '—'}
                 </strong>
               </div>
             </div>
@@ -213,8 +259,8 @@ export function SharingDashboard() {
           <div className={styles.splitBody}>
             <div className={styles.stat}>
               {t('sharing.enabled')}
-              <strong>{data ? number(myStats.keysActive) : '—'}</strong>
-              {data && (
+              <strong>{light ? number(myStats.keysActive) : '—'}</strong>
+              {light && (
                 <span className={styles.statHint}>
                   {t('sharing.stat_keys_hint', { total: myStats.keysTotal })}
                 </span>
@@ -229,8 +275,8 @@ export function SharingDashboard() {
           <div className={styles.splitBody}>
             <div className={styles.stat}>
               {t('sharing.channel')}
-              <strong>{data ? number(myStats.channelsOwned) : '—'}</strong>
-              {data && (
+              <strong>{light ? number(myStats.channelsOwned) : '—'}</strong>
+              {light && (
                 <span className={styles.statHint}>
                   {t('sharing.stat_channels_hint', { published: myStats.channelsPublished })}
                 </span>
@@ -243,7 +289,7 @@ export function SharingDashboard() {
         </Card>
       </div>
       <Card title={t('sharing.my_trend_title')}>
-        {data ? <DailyTrend groups={data.mine.groups} maxDays={7} /> : null}
+        {summaries ? <DailyTrend groups={summaries.mine.groups} maxDays={7} /> : null}
       </Card>
 
       <Card title={t('sharing.start')}>

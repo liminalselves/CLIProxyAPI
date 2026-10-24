@@ -28,7 +28,10 @@ export const parseApiErrorResponse = (
   const errorValue = responseData.error;
   const errorRecord = isRecord(errorValue) ? errorValue : null;
   const stringError = readString(errorValue);
-  const apiCode = stringError || readString(errorRecord?.code) || undefined;
+  // Top-level `code` (e.g. journal_index_building) wins over reusing the error
+  // text as the code; older shapes without it keep their previous behavior.
+  const apiCode =
+    readString(responseData.code) || stringError || readString(errorRecord?.code) || undefined;
   const message =
     readString(responseData.message) ||
     readString(errorRecord?.message) ||

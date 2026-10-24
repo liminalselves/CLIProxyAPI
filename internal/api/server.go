@@ -459,6 +459,11 @@ func (s *Server) Stop(ctx context.Context) error {
 	if s.codexLiveHandler != nil {
 		s.codexLiveHandler.Close()
 	}
+	if s.hub != nil {
+		if errCloseHub := s.hub.Store.Close(); errCloseHub != nil {
+			log.WithError(errCloseHub).Error("failed to close multi-user query index")
+		}
+	}
 	if errCloseServer != nil {
 		return fmt.Errorf("failed to shutdown HTTP server: %v", errCloseServer)
 	}
